@@ -1,0 +1,1 @@
+ALTER TABLE "Agenda" ADD COLUMN "topic" TEXT, ADD COLUMN "speakerName" TEXT, ADD COLUMN "speakerRole" TEXT, ADD COLUMN "audience" TEXT, ADD COLUMN "invitation" TEXT, ADD COLUMN "quote" TEXT;

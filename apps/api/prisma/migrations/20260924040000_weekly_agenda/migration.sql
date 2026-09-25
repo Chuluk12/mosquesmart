@@ -1,0 +1,1 @@
+ALTER TABLE "Agenda" ADD COLUMN "repeatWeekly" BOOLEAN NOT NULL DEFAULT false;

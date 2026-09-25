@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Zainal Arifin — monogram ZA</title>
+  <defs><linearGradient id="bg" x1="10" y1="0" x2="110" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#086da6"/><stop offset="1" stop-color="#05284f"/></linearGradient></defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <path d="M20 104V61C20 39 47 30 64 15C81 30 108 39 108 61V104" stroke="#e9c785" stroke-width="4" stroke-linecap="round"/>
+  <path d="M35 48H75L35 88H70" stroke="white" stroke-width="8" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M62 94L83 48L104 94M72 75H94" stroke="#e9c785" stroke-width="7" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M34 108H94" stroke="#e9c785" stroke-width="3" stroke-linecap="round"/>
+</svg>

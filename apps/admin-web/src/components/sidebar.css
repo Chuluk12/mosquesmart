@@ -1,0 +1,45 @@
+.app>aside.reference-sidebar {
+  width: 215px; padding: 24px 14px 16px; color: #e5f3ff;
+  background: linear-gradient(125deg, #368ad055 0 2%, transparent 2% 4%, #56a5df22 4% 5%, transparent 5%), linear-gradient(160deg, #07599c, #083260);
+  scrollbar-width: thin; scrollbar-color: #4280ab transparent;
+}
+.reference-sidebar .sidebar-brand { flex-direction: column; text-align: center; gap: 8px; padding: 0 8px 26px; }
+.reference-sidebar .sidebar-brand img { width: 57px; height: 57px; }
+.reference-sidebar .sidebar-brand strong { font-size: 18px; letter-spacing: .2px; }
+.reference-sidebar .sidebar-brand small { display: block; max-width: 140px; margin: 5px auto 0; font-size: 10px; line-height: 1.6; color: #b9d9f1; }
+.reference-sidebar .nav-label { font-size: 9px; letter-spacing: 1.8px; padding: 0 12px 10px; color: #92bedf; }
+.reference-sidebar nav { gap: 4px; }
+.reference-sidebar nav a { gap: 10px; padding: 11px 12px; font-size: 12px; border-radius: 7px; color: #d3e6f6; }
+.reference-sidebar svg { width: 17px; height: 17px; flex-shrink: 0; }
+.reference-sidebar nav a svg { color: #9ecdf0; }
+.reference-sidebar nav a.nav-active { background: linear-gradient(110deg, #fff, #edf7ff); color: #0865ab; box-shadow: 0 4px 12px #00234124; }
+.reference-sidebar nav a.nav-active svg { color: #087cca; }
+.sidebar-bottom { margin-top: auto; padding-top: 26px; }
+.sidebar-mosque { text-align: center; border-top: 1px solid #8fc1e32a; padding: 14px 8px 16px; }
+.sidebar-skyline { display: flex; justify-content: center; align-items: flex-end; height: 65px; overflow: hidden; background: radial-gradient(ellipse at bottom, #2e97d54a, transparent 70%); margin-bottom: 8px; }
+.sidebar-skyline img { width: 44px; opacity: .18; }
+.sidebar-skyline img:nth-child(2) { width: 66px; opacity: .4; margin: 0 -3px; }
+.sidebar-mosque strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.sidebar-mosque small { display: block; margin-top: 5px; font-size: 10px; color: #91b9d7; }
+.sidebar-display { display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #74b9ea66; border-radius: 6px; padding: 11px 7px; font-size: 10px; color: #e6f5ff; text-decoration: none; background: #2787c41c; }
+.sidebar-display:hover { background: #2787c447; }
+.sidebar-display svg { width: 15px; height: 15px; }
+.sidebar-display>span { margin-left: auto; }
+.sidebar-session { display: flex; align-items: center; gap: 8px; padding: 15px 4px 0; font-size: 10px; }
+.sidebar-session>span { flex: 1; min-width: 0; }
+.sidebar-session small { display: block; font-size: 8px; color: #9bc1dd; margin-top: 4px; }
+.sidebar-session button { padding: 8px; display: flex; border: 1px solid #8fc1e333; color: #cee8fa; background: #ffffff08; border-radius: 6px; }
+.sidebar-session button:hover { background: #ffffff20; }
+@media(max-width:760px) {
+  .app>aside.reference-sidebar { width: 100%; height: auto; padding: 16px; }
+  .reference-sidebar .sidebar-brand { flex-direction: row; text-align: left; padding: 0 0 14px; gap: 12px; }
+  .reference-sidebar .sidebar-brand img { width: 40px; height: 40px; }
+  .reference-sidebar .sidebar-brand small { max-width: none; margin: 3px 0 0; }
+  .reference-sidebar nav { flex-direction: row; overflow-x: auto; padding-bottom: 10px; }
+  .reference-sidebar nav a { padding: 10px; }
+  .sidebar-bottom { display: flex; align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid #8fc1e32a; }
+  .sidebar-mosque { display: none; }
+  .sidebar-display { flex: 1; }
+  .sidebar-session { padding: 0; }
+  .sidebar-session>span { display: none; }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "mosque-information-audio-system",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:api": "npm run start:dev -w apps/api",
+    "dev:admin": "npm run dev -w apps/admin-web",
+    "dev:display": "npm run dev -w apps/display-web",
+    "dev:player": "npm run dev -w apps/audio-player"
+  }
+}
