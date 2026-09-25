@@ -1,13 +1,50 @@
 services:
-  postgres:
-    image: postgres:16-alpine
+  api:
+    container_name: mosquesmart-api
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: mosque_system
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      API_PORT: 3000
+      AUDIO_STORAGE_DIR: /app/storage/audio
+    command: sh -c "npm run prisma:deploy -w apps/api && npm run start -w apps/api"
     ports:
-      - "5432:5432"
+      - "${API_PORT:-3000}:3000"
     volumes:
-      - mosque_pgdata:/var/lib/postgresql/data
+      - audio_storage:/app/storage/audio
+    restart: unless-stopped
+
+  admin-web:
+    container_name: mosquesmart-admin-web
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:3000}
+        WEB_APP: admin-web
+    depends_on:
+      - api
+    ports:
+      - "${ADMIN_WEB_PORT:-5173}:80"
+    restart: unless-stopped
+
+  display-web:
+    container_name: mosquesmart-display-web
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:3000}
+        WEB_APP: display-web
+    depends_on:
+      - api
+    ports:
+      - "${DISPLAY_WEB_PORT:-5174}:80"
+    restart: unless-stopped
+
 volumes:
-  mosque_pgdata:
+  audio_storage:

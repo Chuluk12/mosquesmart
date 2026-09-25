@@ -1,0 +1,26 @@
+FROM node:22-alpine AS build
+
+ARG WEB_APP
+ARG VITE_API_URL
+ARG VITE_SOCKET_URL
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_SOCKET_URL=$VITE_SOCKET_URL
+
+WORKDIR /app
+COPY package*.json ./
+COPY apps/admin-web/package*.json apps/admin-web/
+COPY apps/display-web/package*.json apps/display-web/
+COPY apps/audio-player/package*.json apps/audio-player/
+COPY apps/api/package*.json apps/api/
+COPY packages/shared-types/package*.json packages/shared-types/
+RUN npm ci
+
+COPY apps/$WEB_APP apps/$WEB_APP
+COPY packages/shared-types packages/shared-types
+RUN npm run build -w apps/$WEB_APP
+
+FROM nginx:1.27-alpine
+ARG WEB_APP
+COPY nginx-spa.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/apps/$WEB_APP/dist /usr/share/nginx/html
+EXPOSE 80

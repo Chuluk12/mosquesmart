@@ -26,7 +26,7 @@ akses internet normal, langkah di bawah akan berjalan seperti biasa.
 
 1. `cp .env.example .env` lalu sesuaikan (minimal `JWT_SECRET`,
    `SEED_SUPER_ADMIN_PASSWORD`).
-2. `docker compose up -d` (PostgreSQL).
+2. Pastikan PostgreSQL target sudah tersedia, lalu isi `DATABASE_URL` di `.env`.
 3. `npm install` di root (workspace-aware, akan install semua `apps/*` dan `packages/*`).
 4. `npm run prisma:generate -w apps/api`
 5. `npm run prisma:migrate -w apps/api` — akan mendeteksi migration yang
@@ -40,7 +40,27 @@ akses internet normal, langkah di bawah akan berjalan seperti biasa.
 8. Terminal 2: `npm run dev:admin` (http://localhost:5173)
 9. Terminal 3: `npm run dev:display` (http://localhost:5174)
 10. Terminal 4 (di mini-PC player, boleh mesin berbeda):
-    `npm run dev:player` — set `PLAYER_SOCKET_URL` ke alamat backend.
+     `npm run dev:player` — set `PLAYER_SOCKET_URL` ke alamat backend.
+
+## Menjalankan dengan Docker Compose
+
+Compose menjalankan API, Admin Web, dan Display Web. Compose **tidak** membuat
+container PostgreSQL. Database harus sudah tersedia di target machine/VPS dan
+`DATABASE_URL` harus menunjuk ke host database yang bisa diakses dari container.
+
+1. `cp .env.example .env` lalu isi `DATABASE_URL`, `JWT_SECRET`, dan kredensial
+   seed.
+2. Jika database berjalan di host Docker Linux, gunakan alamat host yang bisa
+   diroute dari container, bukan `localhost`.
+3. `docker compose up -d --build`
+4. Admin Web tersedia di `http://localhost:5173`.
+5. Display Web tersedia di `http://localhost:5174`.
+6. API tersedia di `http://localhost:3000/api`.
+
+`docker compose up` otomatis menjalankan `prisma migrate deploy` sebelum API
+start. Audio tersimpan di named volume `audio_storage`. Audio player tetap
+dijalankan di mesin amplifier, karena membutuhkan akses ke perangkat audio dan
+engine playback lokal.
 
 Login pertama kali di Admin Web pakai kredensial dari langkah 6.
 
