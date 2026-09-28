@@ -1,3 +1,4 @@
+import { BrowserPlayer } from './BrowserPlayer';
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -68,6 +69,7 @@ export function Layout() {
         </div>
       </aside>
       <main>
+        <BrowserPlayer />
         <Outlet />
       </main>
     </div>
