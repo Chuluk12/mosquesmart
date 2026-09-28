@@ -67,8 +67,6 @@ jobs:
           target: web
           build-args: |
             WEB_APP=admin-web
-            VITE_API_URL=${{ vars.VITE_API_URL }}
-            VITE_SOCKET_URL=${{ vars.VITE_SOCKET_URL }}
           push: true
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/admin-web:${{ steps.meta.outputs.image_tag }}
@@ -83,8 +81,6 @@ jobs:
           target: web
           build-args: |
             WEB_APP=display-web
-            VITE_API_URL=${{ vars.VITE_API_URL }}
-            VITE_SOCKET_URL=${{ vars.VITE_SOCKET_URL }}
           push: true
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/display-web:${{ steps.meta.outputs.image_tag }}

@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
+import { runtimeConfig } from './runtime-config';
 
-const SOCKET_URL = (import.meta as any).env?.VITE_SOCKET_URL || 'http://localhost:3000';
+const SOCKET_URL = runtimeConfig.socketUrl || window.location.origin;
 
 let socket: Socket | null = null;
 

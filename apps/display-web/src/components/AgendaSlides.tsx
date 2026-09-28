@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Agenda } from '../hooks/useMosqueData';
+import { runtimeConfig } from '../lib/runtime-config';
 import './agenda-slides.css';
 
 function MetaIcon({kind}:{kind:'calendar'|'clock'|'pin'}) {
@@ -25,7 +26,7 @@ export function AgendaSlides({ agendas, timezone, mosqueName, enabled, prayerSec
   if (!enabled || !agenda || slide === 0) return null;
   const time=(d:string)=>new Date(d).toLocaleTimeString('id-ID',{timeZone:timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
   return <section className="agenda-display-slide study-slide" key={agenda.id} aria-label="Agenda mushola">
-    <div className="study-art">{agenda.hasImage&&<img className="study-custom-image" src={`${(import.meta as any).env?.VITE_API_URL||'http://localhost:3000/api'}/agendas/${agenda.id}/image?v=${agenda.updatedAt||''}`} alt="" onError={e=>{e.currentTarget.style.display='none';}}/>}<span className="study-badge">&#128214; &nbsp; {agenda.repeatWeekly?'KAJIAN RUTIN':'AGENDA MUSHOLA'}</span><blockquote>&ldquo;{agenda.quote||'Mari belajar bersama, menambah ilmu dan mempererat ukhuwah.'}&rdquo;</blockquote></div>
+     <div className="study-art">{agenda.hasImage&&<img className="study-custom-image" src={`${runtimeConfig.apiUrl||'/api'}/agendas/${agenda.id}/image?v=${agenda.updatedAt||''}`} alt="" onError={e=>{e.currentTarget.style.display='none';}}/>}<span className="study-badge">&#128214; &nbsp; {agenda.repeatWeekly?'KAJIAN RUTIN':'AGENDA MUSHOLA'}</span><blockquote>&ldquo;{agenda.quote||'Mari belajar bersama, menambah ilmu dan mempererat ukhuwah.'}&rdquo;</blockquote></div>
     <div className="study-body"><small className="study-eyebrow">AGENDA MUSHOLA</small><h2>{agenda.title}</h2>
       {agenda.topic&&<h3>{agenda.topic}</h3>}
       {agenda.description&&<p className="study-description">{agenda.description}</p>}

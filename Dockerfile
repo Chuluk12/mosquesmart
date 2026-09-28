@@ -40,6 +40,9 @@ CMD ["npm", "run", "start", "-w", "apps/api"]
 FROM nginx:1.27-alpine AS web
 
 ARG WEB_APP
+COPY docker/runtime-config.template.js /usr/share/nginx/html/runtime-config.template.js
+COPY docker/entrypoint-web.sh /docker-entrypoint.d/40-runtime-config.sh
 COPY nginx-spa.conf /etc/nginx/conf.d/default.conf
 COPY --from=web-build /app/apps/${WEB_APP}/dist /usr/share/nginx/html
+RUN chmod +x /docker-entrypoint.d/40-runtime-config.sh
 EXPOSE 80

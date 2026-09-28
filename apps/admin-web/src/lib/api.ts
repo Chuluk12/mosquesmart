@@ -1,4 +1,6 @@
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api';
+import { runtimeConfig } from './runtime-config';
+
+const API_BASE = runtimeConfig.apiUrl || '/api';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
