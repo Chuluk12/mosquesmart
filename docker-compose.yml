@@ -2,9 +2,6 @@ services:
   api:
     container_name: mosquesmart-api
     image: ${IMAGE_REGISTRY:-ghcr.io/chuluk12/mosquesmart}/api:${IMAGE_TAG:-latest}
-    build:
-      context: .
-      target: api
     env_file:
       - .env
     environment:
@@ -23,13 +20,8 @@ services:
   admin-web:
     container_name: mosquesmart-admin-web
     image: ${IMAGE_REGISTRY:-ghcr.io/chuluk12/mosquesmart}/admin-web:${IMAGE_TAG:-latest}
-    build:
-      context: .
-      target: web
-      args:
-        WEB_APP: admin-web
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
-        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:3000}
+    env_file:
+      - .env
     depends_on:
       - api
     ports:
@@ -39,13 +31,8 @@ services:
   display-web:
     container_name: mosquesmart-display-web
     image: ${IMAGE_REGISTRY:-ghcr.io/chuluk12/mosquesmart}/display-web:${IMAGE_TAG:-latest}
-    build:
-      context: .
-      target: web
-      args:
-        WEB_APP: display-web
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
-        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:3000}
+    env_file:
+      - .env
     depends_on:
       - api
     ports:

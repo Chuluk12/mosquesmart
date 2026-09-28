@@ -1,5 +1,5 @@
 FROM node:22-alpine AS dependencies
-
+          
 WORKDIR /app
 COPY package*.json ./
 COPY apps/api/package*.json apps/api/
@@ -17,10 +17,6 @@ FROM dependencies AS web-build
 ARG WEB_APP
 COPY apps/${WEB_APP} apps/${WEB_APP}
 COPY packages/shared-types packages/shared-types
-ARG VITE_API_URL
-ARG VITE_SOCKET_URL
-ENV VITE_API_URL=${VITE_API_URL}
-ENV VITE_SOCKET_URL=${VITE_SOCKET_URL}
 RUN npm run build -w apps/${WEB_APP}
 
 FROM node:22-alpine AS api
