@@ -142,7 +142,7 @@ jobs:
             git reset --hard origin/main
             printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin
             IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env pull
-            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env run --rm --no-build api npm run prisma:deploy -w apps/api
-            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env up -d --no-build --remove-orphans
+            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env run --rm api npm run prisma:deploy -w apps/api
+            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env up -d --remove-orphans
             docker image prune -f
             docker logout ghcr.io
