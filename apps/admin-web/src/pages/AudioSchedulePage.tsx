@@ -7,9 +7,12 @@ import './audio-schedule.css';
 interface Audio { id: string; name: string }
 interface AudioSchedule {
   id: string; audioId: string; maxDurationMinutes?: number | null; audio?: Audio; scheduleType: 'FIXED_TIME' | 'PRAYER_RELATIVE';
-  prayerName?: string; offsetMinutes?: number; fixedTime?: string; volume: number; isActive: boolean;
+  daysOfWeek?: number[]; prayerName?: string; offsetMinutes?: number; fixedTime?: string; volume: number; isActive: boolean;
 }
 
+const DAYS = [{id:1,label:'Senin'},{id:2,label:'Selasa'},{id:3,label:'Rabu'},{id:4,label:'Kamis'},{id:5,label:'Jumat'},{id:6,label:'Sabtu'},{id:0,label:'Minggu'}];
+const ALL_DAYS = DAYS.map(day=>day.id);
+const daySummary = (days?: number[]) => !days?.length || days.length===7 ? 'Setiap hari' : `Setiap ${DAYS.filter(day=>days.includes(day.id)).map(day=>day.label).join(', ')}`;
 const PRAYERS = ['FAJR', 'DHUHR', 'ASR', 'MAGHRIB', 'ISHA'];
 const LABELS: Record<string,string> = { FAJR:'Subuh', DHUHR:'Dzuhur', ASR:'Ashar', MAGHRIB:'Maghrib', ISHA:'Isya' };
 interface Upcoming { serverNow: string; timezone: string; items: { id: string; atUtc: string | null; reason: string | null }[] }
@@ -40,6 +43,7 @@ export function AudioSchedulePage() {
   const [prayerName, setPrayerName] = useState('DHUHR');
   const [offsetMinutes, setOffsetMinutes] = useState(-10);
   const [fixedTime, setFixedTime] = useState('07:30');
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>(ALL_DAYS);
   const [volume, setVolume] = useState(80);
   const [maxDurationMinutes, setMaxDurationMinutes] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -52,11 +56,13 @@ export function AudioSchedulePage() {
   useEffect(() => { load(); }, []);
 
   const reset = () => {
+    setDaysOfWeek(ALL_DAYS);
     setMaxDurationMinutes('');
     setEditing(null); setAudioId(''); setScheduleType('PRAYER_RELATIVE');
     setPrayerName('DHUHR'); setOffsetMinutes(-10); setFixedTime('07:30'); setVolume(80);
   };
   const edit = (schedule: AudioSchedule) => {
+    setDaysOfWeek(schedule.daysOfWeek?.length ? schedule.daysOfWeek : ALL_DAYS);
     setMaxDurationMinutes(schedule.maxDurationMinutes == null ? '' : String(schedule.maxDurationMinutes));
     setEditing(schedule); setAudioId(schedule.audioId); setScheduleType(schedule.scheduleType);
     setPrayerName(schedule.prayerName || 'DHUHR'); setOffsetMinutes(schedule.offsetMinutes ?? -10);
@@ -67,11 +73,12 @@ export function AudioSchedulePage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!audioId) { setError('Pilih audio terlebih dahulu.'); return; }
+    if (!daysOfWeek.length) { setError('Pilih minimal satu hari pengulangan.'); return; }
     setError(null);
     setMessage(''); setSaving(true);
     try {
       const payload = {
-        audioId, scheduleType, volume, maxDurationMinutes: maxDurationMinutes === '' ? null : Number(maxDurationMinutes),
+        audioId, scheduleType, daysOfWeek, volume, maxDurationMinutes: maxDurationMinutes === '' ? null : Number(maxDurationMinutes),
         ...(scheduleType === 'PRAYER_RELATIVE' ? { prayerName, offsetMinutes } : { fixedTime }),
       };
       if (editing) await api.patch(`/audio-schedules/${editing.id}`, payload);
@@ -137,6 +144,16 @@ export function AudioSchedulePage() {
           </div>
         )}
 
+        <fieldset className="schedule-days">
+          <legend>Hari pengulangan</legend>
+          <div className="schedule-day-options">
+            <button type="button" className="secondary" onClick={()=>setDaysOfWeek(ALL_DAYS)}>Setiap hari</button>
+            <button type="button" className="secondary" onClick={()=>setDaysOfWeek([5])}>Jumat saja</button>
+            {DAYS.map(day=><label key={day.id}><input type="checkbox" checked={daysOfWeek.includes(day.id)} onChange={e=>setDaysOfWeek(current=>e.target.checked?[...current,day.id]:current.filter(id=>id!==day.id))}/>{day.label}</label>)}
+          </div>
+          <p className="hint">Berulang setiap minggu pada hari yang dicentang, mengikuti {timezone}. Tidak perlu memilih tanggal.</p>
+        </fieldset>
+
         <div style={{margin: '16px 0'}}>
           <label htmlFor="max-duration">Batas durasi (menit)</label>
           <input id="max-duration" type="number" min={1} max={1440} step={1} placeholder="Sampai audio selesai" value={maxDurationMinutes} onChange={e => setMaxDurationMinutes(e.target.value)} />
@@ -144,13 +161,13 @@ export function AudioSchedulePage() {
         </div>
         <label>Volume</label>
         <div className="schedule-volume"><span aria-hidden="true">♪</span><input aria-label="Volume audio" type="range" min={0} max={100} value={volume} onChange={(e) => setVolume(Number(e.target.value))} /><output>{volume}%</output></div>
-        <p className="schedule-explanation">ⓘ Audio akan mulai diputar {scheduleType === 'FIXED_TIME' ? `pukul ${fixedTime} (${timezone})` : offsetMinutes === 0 ? `tepat pada waktu ${LABELS[prayerName]}` : `${Math.abs(offsetMinutes)} menit ${offsetMinutes < 0 ? 'sebelum' : 'setelah'} waktu ${LABELS[prayerName]}`} dengan volume {volume}%. {maxDurationMinutes ? `Berhenti otomatis setelah ${maxDurationMinutes} menit, atau lebih awal jika audio selesai.` : 'Diputar sampai audio selesai.'}</p>
+        <p className="schedule-explanation">ⓘ Audio akan mulai diputar {scheduleType === 'FIXED_TIME' ? `pukul ${fixedTime} (${timezone})` : offsetMinutes === 0 ? `tepat pada waktu ${LABELS[prayerName]}` : `${Math.abs(offsetMinutes)} menit ${offsetMinutes < 0 ? 'sebelum' : 'setelah'} waktu ${LABELS[prayerName]}`} dengan volume {volume}%. {daysOfWeek.length ? daySummary(daysOfWeek) : 'Belum ada hari dipilih'}. {maxDurationMinutes ? `Berhenti otomatis setelah ${maxDurationMinutes} menit, atau lebih awal jika audio selesai.` : 'Diputar sampai audio selesai.'}</p>
 
         <div className="form-actions"><button type="submit" disabled={saving}>{saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Tambah Jadwal'}</button>
           <button type="button" className="secondary" disabled={saving} onClick={() => { reset(); setError(null); }}>{editing ? 'Batal' : '↶ Reset'}</button>
         </div>
       </form>
-      <aside className="schedule-guide"><h2>▤ Informasi Jadwal Audio</h2><p>Jadwalkan pemutaran audio otomatis berdasarkan waktu sholat atau jam tertentu.</p><hr/><h3>Tipe Jadwal</h3><div><span>◉</span><p><b>Relatif terhadap Sholat</b><small>Mengikuti jadwal API setiap hari. Contoh: 3 menit sebelum adzan.</small></p></div><div><span>◷</span><p><b>Jam Tetap</b><small>Diputar setiap hari pada jam yang dipilih sesuai zona waktu mushola.</small></p></div><section><h3>☼ Tips</h3><p>Gunakan nilai negatif (−) untuk sebelum sholat dan positif (+) untuk setelah sholat.</p><p>Pastikan Audio Player online dan speaker terhubung.</p></section></aside></div>
+      <aside className="schedule-guide"><h2>▤ Informasi Jadwal Audio</h2><p>Jadwalkan pemutaran audio otomatis berdasarkan waktu sholat atau jam tertentu.</p><hr/><h3>Tipe Jadwal</h3><div><span>◉</span><p><b>Relatif terhadap Sholat</b><small>Mengikuti jadwal API pada hari yang dipilih. Contoh: 3 menit sebelum adzan.</small></p></div><div><span>◷</span><p><b>Jam Tetap</b><small>Diputar pada hari dan jam yang dipilih sesuai zona waktu mushola.</small></p></div><section><h3>☼ Tips</h3><p>Gunakan nilai negatif (−) untuk sebelum sholat dan positif (+) untuk setelah sholat.</p><p>Pastikan Audio Player online dan speaker terhubung.</p></section></aside></div>
 
       <section className="form-panel schedule-list"><div className="schedule-list-header"><div className="schedule-heading"><span>▦</span><div><h2>Daftar Jadwal Audio</h2><p>Kelola jadwal dan pantau waktu pemutaran berikutnya.</p></div></div><div className="schedule-filters"><input aria-label="Cari jadwal audio" placeholder="Cari jadwal..." value={query} onChange={e=>setQuery(e.target.value)}/><Select aria-label="Filter tipe jadwal" value={filter} onChange={e=>setFilter(e.target.value)}><option value="">Semua Jadwal</option><option value="PRAYER_RELATIVE">Relatif Sholat</option><option value="FIXED_TIME">Jam Tetap</option></Select><button type="button" className="secondary" onClick={load}>↻ Refresh</button></div></div>
       <p className="hint">Hitung mundur menuju jadwal voice berikutnya, mengikuti waktu server dan zona waktu mushola. Audio diputar oleh Audio Player; pemeriksaan jadwal dilakukan setiap 20 detik.</p>
@@ -161,7 +178,7 @@ export function AudioSchedulePage() {
           {shown.map((s) => (
             <tr key={s.id}>
               <td>{s.audio?.name || audios.find((a) => a.id === s.audioId)?.name || s.audioId}</td>
-              <td>{s.scheduleType === 'FIXED_TIME' ? s.fixedTime : `${LABELS[s.prayerName || ''] || s.prayerName} ${s.offsetMinutes! >= 0 ? '+' : ''}${s.offsetMinutes} menit`}</td>
+              <td>{s.scheduleType === 'FIXED_TIME' ? s.fixedTime : `${LABELS[s.prayerName || ''] || s.prayerName} ${s.offsetMinutes! >= 0 ? '+' : ''}${s.offsetMinutes} menit`}<div className="hint">{daySummary(s.daysOfWeek)}</div></td>
               <td><span className="schedule-type">{s.scheduleType === 'FIXED_TIME' ? 'Jam Tetap' : 'Relatif Sholat'}</span></td>
               <td>{(() => {
                 if (!s.isActive) return <span className="hint">Jadwal nonaktif</span>;
