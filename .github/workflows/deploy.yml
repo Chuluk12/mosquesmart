@@ -25,6 +25,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify build files
+        shell: bash
+        run: |
+          set -eu
+          test -f Dockerfile
+          test -f nginx-spa.conf
+          test -f package-lock.json
+
       - name: Set image metadata
         id: meta
         shell: bash
@@ -44,7 +52,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.api
+          target: api
           push: true
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/api:${{ steps.meta.outputs.image_tag }}
@@ -56,7 +64,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.web
+          target: web
           build-args: |
             WEB_APP=admin-web
             VITE_API_URL=${{ vars.VITE_API_URL }}
@@ -72,7 +80,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.web
+          target: web
           build-args: |
             WEB_APP=display-web
             VITE_API_URL=${{ vars.VITE_API_URL }}
@@ -134,7 +142,7 @@ jobs:
             git reset --hard origin/main
             printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin
             IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env pull
-            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env run --rm api npm run prisma:deploy -w apps/api
-            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env up -d --remove-orphans
+            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env run --rm --no-build api npm run prisma:deploy -w apps/api
+            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env up -d --no-build --remove-orphans
             docker image prune -f
             docker logout ghcr.io
