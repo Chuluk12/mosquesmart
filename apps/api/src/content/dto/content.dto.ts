@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
+import { Min, Max, IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
 import { ContentType } from '@prisma/client';
 
 export class CreateContentDto {
@@ -6,6 +6,7 @@ export class CreateContentDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() content?: string;
   @IsOptional() @IsString() mediaUrl?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(3600) durationSeconds?: number;
   @IsOptional() @IsInt() displayOrder?: number;
   @IsOptional() @IsDateString() startAt?: string;
   @IsOptional() @IsDateString() endAt?: string;
@@ -17,6 +18,7 @@ export class UpdateContentDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() content?: string;
   @IsOptional() @IsString() mediaUrl?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(3600) durationSeconds?: number;
   @IsOptional() @IsInt() displayOrder?: number;
   @IsOptional() @IsDateString() startAt?: string;
   @IsOptional() @IsDateString() endAt?: string;

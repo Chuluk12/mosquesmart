@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Agenda } from '../hooks/useMosqueData';
+import { Agenda, Content } from '../hooks/useMosqueData';
 import { runtimeConfig } from '../lib/runtime-config';
 import './agenda-slides.css';
 
@@ -8,22 +8,30 @@ function MetaIcon({kind}:{kind:'calendar'|'clock'|'pin'}) {
 }
 
 // Use the persisted durations; prayer takeover screens unmount this slideshow.
-export function AgendaSlides({ agendas, timezone, mosqueName, enabled, prayerSeconds = 120, agendaSeconds = 60 }: { agendas: Agenda[]; timezone: string; mosqueName?: string; enabled: boolean; prayerSeconds?: number; agendaSeconds?: number }) {
+export function AgendaSlides({ contents = [], agendas, timezone, mosqueName, enabled, prayerSeconds = 120, agendaSeconds = 60 }: { contents?: Content[]; agendas: Agenda[]; timezone: string; mosqueName?: string; enabled: boolean; prayerSeconds?: number; agendaSeconds?: number }) {
   const [slide, setSlide] = useState(0);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const day = (value: number) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
-  const available = agendas.filter(a => a.endDate ? Date.parse(a.endDate) > now : day(Date.parse(a.startDate)) >= day(now))
+  const available = (enabled ? agendas : []).filter(a => a.endDate ? Date.parse(a.endDate) > now : day(Date.parse(a.startDate)) >= day(now))
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const identity = available.map(a => a.id).join(',');
+  const media = contents.filter(c => c.isActive !== false && c.type !== 'RUNNING_TEXT' && (!c.startAt || Date.parse(c.startAt)<=now) && (!c.endAt || Date.parse(c.endAt)>now) && (['IMAGE','VIDEO'].includes(c.type) ? !!c.mediaUrl : !!c.content)).sort((a,b)=>(a.displayOrder||0)-(b.displayOrder||0)||a.id.localeCompare(b.id));
+  const total = available.length + media.length;
+  const content = media[slide - available.length - 1];
+  const seconds = slide===0 ? prayerSeconds : content ? Math.max(1, Math.min(3600, content.durationSeconds||10)) : agendaSeconds;
+  const identity = JSON.stringify([available.map(a=>a.id),media.map(c=>[c.id,c.durationSeconds,c.mediaUrl,c.content,c.title])]);
   useEffect(() => { setSlide(0); }, [identity, enabled, prayerSeconds, agendaSeconds]);
   useEffect(() => {
-    if (!enabled || !available.length) return;
-    const timer = setTimeout(() => setSlide(value => (value + 1) % (available.length + 1)), (slide === 0 ? prayerSeconds : agendaSeconds) * 1000);
+    if (!total) return;
+    const timer = setTimeout(() => setSlide(value => (value + 1) % (total + 1)), seconds * 1000);
     return () => clearTimeout(timer);
-  }, [slide, identity, enabled, available.length, prayerSeconds, agendaSeconds]);
+  }, [slide, identity, total, seconds]);
   const agenda = available[slide - 1];
-  if (!enabled || !agenda || slide === 0) return null;
+  if (content) return <section className="agenda-display-slide content-display-slide" key={content.id} aria-label={content.title||'Konten display'}>
+    {content.type==='IMAGE'?<img src={content.mediaUrl} alt={content.title||'Poster'} onError={()=>setSlide(value=>(value+1)%(total+1))}/>:content.type==='VIDEO'?<video src={content.mediaUrl} autoPlay muted playsInline loop onError={()=>setSlide(value=>(value+1)%(total+1))}/>:<article><h2>{content.title}</h2><p>{content.content}</p></article>}
+    <div className="agenda-slide-progress" style={{animationDuration:`${seconds}s`}}/>
+  </section>;
+  if (!agenda || slide === 0) return null;
   const time=(d:string)=>new Date(d).toLocaleTimeString('id-ID',{timeZone:timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
   return <section className="agenda-display-slide study-slide" key={agenda.id} aria-label="Agenda mushola">
      <div className="study-art">{agenda.hasImage&&<img className="study-custom-image" src={`${runtimeConfig.apiUrl||'/api'}/agendas/${agenda.id}/image?v=${agenda.updatedAt||''}`} alt="" onError={e=>{e.currentTarget.style.display='none';}}/>}<span className="study-badge">&#128214; &nbsp; {agenda.repeatWeekly?'KAJIAN RUTIN':'AGENDA MUSHOLA'}</span><blockquote>&ldquo;{agenda.quote||'Mari belajar bersama, menambah ilmu dan mempererat ukhuwah.'}&rdquo;</blockquote></div>
@@ -37,7 +45,7 @@ export function AgendaSlides({ agendas, timezone, mosqueName, enabled, prayerSec
         <div><MetaIcon kind="pin"/><div className="study-meta-text"><small>TEMPAT</small><strong>{mosqueName||agenda.location||'Di mushola'}</strong>{mosqueName&&agenda.location&&agenda.location!==mosqueName&&<span>{agenda.location}</span>}</div></div>
       </div>
       <div className="study-invitation"><strong>{agenda.audience||'Mari hadiri kegiatan mushola'}</strong><p>{agenda.invitation||'Mari hadir tepat waktu dan belajar bersama.'}</p></div>
-      <footer className="study-footer"><span>{slide} / {available.length}</span><button type="button" aria-label="Agenda sebelumnya" onClick={()=>setSlide(slide<=1?available.length:slide-1)}>&lsaquo;</button><button type="button" aria-label="Agenda berikutnya" onClick={()=>setSlide(slide>=available.length?0:slide+1)}>&rsaquo;</button></footer>
+      <footer className="study-footer"><span>{slide} / {available.length}</span><button type="button" aria-label="Agenda sebelumnya" onClick={()=>setSlide(slide<=1?available.length:slide-1)}>&lsaquo;</button><button type="button" aria-label="Agenda berikutnya" onClick={()=>setSlide(slide>=total?0:slide+1)}>&rsaquo;</button></footer>
     </div><div className="agenda-slide-progress" style={{animationDuration:`${agendaSeconds}s`}}/>
   </section>;
 }

@@ -6,7 +6,7 @@ import { PrayerKey } from '@mosque/shared-types';
 export interface Mosque { agendaSlidesEnabled?: boolean; prayerSlideSeconds?: number; agendaSlideSeconds?: number; displayBackground?: string; displayLayout?: string; displayTheme?: string; id: string; name: string; address?: string; city?: string; province?: string; latitude?: number; longitude?: number; logo?: string; runningText?: string; timezone: string }
 export interface PrayerToday { effective: Record<PrayerKey, string>; iqomah: Record<PrayerKey, number>; stale?: boolean; nextPrayer?: { name: PrayerKey; label: string; time: string; atUtc: string; iqomahMin: number } }
 export interface Agenda { hasImage?:boolean; updatedAt?:string; repeatWeekly?:boolean; topic?:string; speakerName?:string; speakerRole?:string; audience?:string; invitation?:string; quote?:string;  id: string; title: string; startDate: string; endDate?: string; description?: string; location?: string }
-export interface Content { id: string; type: string; title?: string; content?: string }
+export interface Content { mediaUrl?: string; durationSeconds?: number; displayOrder?: number; isActive?: boolean; startAt?: string; endAt?: string; id: string; type: string; title?: string; content?: string }
 
 export interface MosqueData {
   mosque: Mosque | null;
