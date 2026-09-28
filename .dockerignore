@@ -1,0 +1,9 @@
+.git
+.github
+.codebase-memory
+node_modules
+**/node_modules
+**/dist
+storage
+*.log
+.env
