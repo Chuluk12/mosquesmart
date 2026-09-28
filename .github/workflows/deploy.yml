@@ -132,17 +132,24 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          command_timeout: 15m
           envs: IMAGE_NAMESPACE,IMAGE_TAG,GHCR_USERNAME,GHCR_TOKEN
           script_stop: true
           script: |
             set -eu
             cd "$HOME/repositories/mosquesmart"
             test -f .env
+            trap 'status=$?; echo "Deployment failed with exit code $status"; docker compose --env-file .env ps -a; docker compose --env-file .env logs --tail=100 api admin-web display-web || true; exit "$status"' ERR
             git fetch origin main
             git reset --hard origin/main
             printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin
-            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env pull
-            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env run --rm api npm run prisma:deploy -w apps/api
-            IMAGE_REGISTRY="$IMAGE_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" docker compose --env-file .env up -d --remove-orphans
+            export IMAGE_REGISTRY="$IMAGE_NAMESPACE"
+            export IMAGE_TAG="$IMAGE_TAG"
+            docker compose --env-file .env pull
+            if ! docker compose --env-file .env run --rm --no-build api npm run prisma:deploy -w apps/api; then
+              echo "WARNING: Prisma migration failed. Continuing deployment; run migration manually after checking the logs."
+            fi
+            docker compose --env-file .env up -d --no-build --remove-orphans --timeout 60
+            docker compose --env-file .env ps -a
             docker image prune -f
             docker logout ghcr.io

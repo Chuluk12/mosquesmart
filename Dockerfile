@@ -29,9 +29,14 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=api-build /app/package*.json ./
 COPY --from=api-build /app/apps/api/package*.json apps/api/
+COPY --from=api-build /app/apps/admin-web/package*.json apps/admin-web/
+COPY --from=api-build /app/apps/display-web/package*.json apps/display-web/
+COPY --from=api-build /app/apps/audio-player/package*.json apps/audio-player/
+COPY --from=api-build /app/packages/shared-types/package*.json packages/shared-types/
+RUN npm ci --omit=dev
 COPY --from=api-build /app/apps/api/dist apps/api/dist
 COPY --from=api-build /app/apps/api/prisma apps/api/prisma
-COPY --from=api-build /app/node_modules node_modules
+COPY --from=api-build /app/node_modules/.prisma node_modules/.prisma
 RUN mkdir -p /app/storage/audio
 EXPOSE 3000
 CMD ["npm", "run", "start", "-w", "apps/api"]
