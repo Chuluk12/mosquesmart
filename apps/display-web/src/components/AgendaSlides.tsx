@@ -7,6 +7,8 @@ function MetaIcon({kind}:{kind:'calendar'|'clock'|'pin'}) {
  return <svg className="study-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{kind==='calendar'?<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6m10-6v6M3 11h18M7 15h1m4 0h1m4 0h1M7 18h1m4 0h1"/></>:kind==='clock'?<><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></>:<><path fill="currentColor" stroke="none" d="M12 2a8 8 0 0 0-8 8c0 6 8 13 8 13s8-7 8-13a8 8 0 0 0-8-8Z"/><circle cx="12" cy="10" r="3" fill="white" stroke="none"/></>}</svg>;
 }
 
+const mediaSource=(url?:string)=>url?.startsWith('/api/contents/images/')?new URL(url,new URL(runtimeConfig.apiUrl||'/api',window.location.origin)).href:url;
+
 // Use the persisted durations; prayer takeover screens unmount this slideshow.
 export function AgendaSlides({ contents = [], agendas, timezone, mosqueName, enabled, prayerSeconds = 120, agendaSeconds = 60 }: { contents?: Content[]; agendas: Agenda[]; timezone: string; mosqueName?: string; enabled: boolean; prayerSeconds?: number; agendaSeconds?: number }) {
   const [slide, setSlide] = useState(0);
@@ -28,7 +30,7 @@ export function AgendaSlides({ contents = [], agendas, timezone, mosqueName, ena
   }, [slide, identity, total, seconds]);
   const agenda = available[slide - 1];
   if (content) return <section className="agenda-display-slide content-display-slide" key={content.id} aria-label={content.title||'Konten display'}>
-    {content.type==='IMAGE'?<img src={content.mediaUrl} alt={content.title||'Poster'} onError={()=>setSlide(value=>(value+1)%(total+1))}/>:content.type==='VIDEO'?<video src={content.mediaUrl} autoPlay muted playsInline loop onError={()=>setSlide(value=>(value+1)%(total+1))}/>:<article><h2>{content.title}</h2><p>{content.content}</p></article>}
+    {content.type==='IMAGE'?<img src={mediaSource(content.mediaUrl)} alt={content.title||'Poster'} onError={()=>setSlide(value=>(value+1)%(total+1))}/>:content.type==='VIDEO'?<video src={mediaSource(content.mediaUrl)} autoPlay muted playsInline loop onError={()=>setSlide(value=>(value+1)%(total+1))}/>:<article><h2>{content.title}</h2><p>{content.content}</p></article>}
     <div className="agenda-slide-progress" style={{animationDuration:`${seconds}s`}}/>
   </section>;
   if (!agenda || slide === 0) return null;
