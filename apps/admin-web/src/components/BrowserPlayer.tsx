@@ -1,4 +1,5 @@
-﻿import React,{useEffect,useRef,useState} from 'react';
+﻿import {runtimeConfig} from '../lib/runtime-config';
+import React,{useEffect,useRef,useState} from 'react';
 import {io,Socket} from 'socket.io-client';
 import {api} from '../lib/api';
 
@@ -16,7 +17,7 @@ export function BrowserPlayer(){
    const a=audio.current!;
    a.src='data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQIAAAAAAA==';
    await a.play();a.pause();a.removeAttribute('src');a.load();
-   const base=(import.meta as any).env?.VITE_SOCKET_URL||api.baseUrl.replace(/\/api\/?$/,'');
+   const base=runtimeConfig.socketUrl||new URL(api.baseUrl,window.location.origin).origin;
    const s=io(`${base.replace(/\/$/,'')}/player`,{autoConnect:false,reconnection:true});socket.current=s;
    s.on('connect',()=>{setState('Mendaftarkan perangkat...');s.emit('player:register',{deviceId,name:'Player Browser'});});
    s.on('player:registered',(ack:{ok:boolean;error?:string})=>{setState(ack.ok?'Online - siap memutar audio':'Gagal mendaftar');if(!ack.ok)setError(ack.error||'Pendaftaran gagal.');});
@@ -39,3 +40,4 @@ export function BrowserPlayer(){
  useEffect(()=>{const timer=setInterval(()=>{if(socket.current?.connected)socket.current.emit('player:heartbeat',{deviceId});},10000);const budget=setInterval(()=>{if(history.current&&limit.current&&audio.current&&audio.current.currentTime>=limit.current){stop();setState('Online - batas durasi tercapai');}},250);return()=>{clearInterval(timer);clearInterval(budget);stop();socket.current?.disconnect();};},[]);
  return <section className="form-panel"><h2>Player Browser</h2><p>Putar audio jadwal dari hosting melalui speaker perangkat ini.</p><p role="status"><strong>{state}</strong></p>{error&&<p className="alert-error" role="alert">{error}</p>}<div className="form-actions"><button type="button" disabled={enabled} onClick={()=>void activate()}>Aktifkan Audio Browser</button><button type="button" className="secondary" disabled={!enabled} onClick={deactivate}>Nonaktifkan</button></div><p className="hint">Biarkan halaman ini terbuka dan perangkat tidak sleep. Aktifkan hanya satu tab pada perangkat speaker agar suara tidak berlipat. Setelah Online, pilih audio dan klik Play di Player untuk tes.</p><audio ref={audio} preload="auto" onPlaying={()=>{if(history.current){report('PLAYING');setState('Sedang memutar audio');}}} onEnded={()=>{if(history.current){report('FINISHED');setState('Online - audio selesai');}}} onError={()=>{if(history.current){report('ERROR','File audio tidak dapat dimuat');setError('File audio tidak dapat dimuat dari hosting.');setState('Gagal memuat audio');}}}/></section>;
 }
+
