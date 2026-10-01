@@ -40,6 +40,7 @@ function reportStatus(status: AudioEngineStatus) {
     historyId: currentHistoryId ?? undefined,
     status: backendStatus,
     errorMessage: status.errorMessage,
+    positionSeconds: status.positionSeconds,
   });
   if (backendStatus === 'FINISHED' || backendStatus === 'STOPPED' || backendStatus === 'ERROR') {
     currentHistoryId = null;
@@ -66,7 +67,7 @@ socket.on('connect_error', (err) => {
   log('connection error (will retry):', err.message);
 });
 
-socket.on('audio:play', (payload: { historyId: string; audioId: string; audioUrl: string; volume: number; maxDurationMinutes?: number | null }) => {
+socket.on('audio:play', (payload: { historyId: string; audioId: string; audioUrl: string; volume: number; maxDurationMinutes?: number | null; startPositionSeconds?: number }) => {
   playQueue = playQueue.then(async () => {
   playbackLimit.clear();
   if (currentHistoryId) await engine.stop();
@@ -74,7 +75,7 @@ socket.on('audio:play', (payload: { historyId: string; audioId: string; audioUrl
   currentHistoryId = payload.historyId;
   playbackLimit.configure(payload.maxDurationMinutes);
   try {
-    await engine.play(payload.audioUrl, payload.volume ?? 80);
+    await engine.play(payload.audioUrl, payload.volume ?? 80, Math.max(0, payload.startPositionSeconds || 0));
   } catch (err) {
     // Defense in depth: even if an engine implementation misbehaves and
     // throws, the process must keep running.
@@ -107,7 +108,10 @@ socket.on('audio:set-volume', async (payload: { volume: number }) => {
 });
 
 setInterval(() => {
-  if (socket.connected) socket.emit('player:heartbeat', { deviceId });
+  if (socket.connected) {
+    socket.emit('player:heartbeat', { deviceId });
+    if (currentHistoryId) socket.emit('player:progress', { deviceId, historyId: currentHistoryId, positionSeconds: engine.getStatus().positionSeconds });
+  }
 }, 10_000);
 
 // Last line of defense: this service runs unattended on a mini-PC next to

@@ -6,7 +6,7 @@ import './audio-schedule.css';
 
 interface Audio { id: string; name: string }
 interface AudioSchedule {
-  id: string; audioId: string; maxDurationMinutes?: number | null; audio?: Audio; scheduleType: 'FIXED_TIME' | 'PRAYER_RELATIVE';
+  id: string; audioId: string; maxDurationMinutes?: number | null; resumePlayback?: boolean; resumePositionSeconds?: number; audio?: Audio; scheduleType: 'FIXED_TIME' | 'PRAYER_RELATIVE';
   daysOfWeek?: number[]; prayerName?: string; offsetMinutes?: number; fixedTime?: string; volume: number; isActive: boolean;
 }
 
@@ -45,6 +45,7 @@ export function AudioSchedulePage() {
   const [fixedTime, setFixedTime] = useState('07:30');
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(ALL_DAYS);
   const [volume, setVolume] = useState(80);
+  const [resumePlayback, setResumePlayback] = useState(false);
   const [maxDurationMinutes, setMaxDurationMinutes] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -57,12 +58,14 @@ export function AudioSchedulePage() {
 
   const reset = () => {
     setDaysOfWeek(ALL_DAYS);
+    setResumePlayback(false);
     setMaxDurationMinutes('');
     setEditing(null); setAudioId(''); setScheduleType('PRAYER_RELATIVE');
     setPrayerName('DHUHR'); setOffsetMinutes(-10); setFixedTime('07:30'); setVolume(80);
   };
   const edit = (schedule: AudioSchedule) => {
     setDaysOfWeek(schedule.daysOfWeek?.length ? schedule.daysOfWeek : ALL_DAYS);
+    setResumePlayback(!!schedule.resumePlayback);
     setMaxDurationMinutes(schedule.maxDurationMinutes == null ? '' : String(schedule.maxDurationMinutes));
     setEditing(schedule); setAudioId(schedule.audioId); setScheduleType(schedule.scheduleType);
     setPrayerName(schedule.prayerName || 'DHUHR'); setOffsetMinutes(schedule.offsetMinutes ?? -10);
@@ -78,7 +81,7 @@ export function AudioSchedulePage() {
     setMessage(''); setSaving(true);
     try {
       const payload = {
-        audioId, scheduleType, daysOfWeek, volume, maxDurationMinutes: maxDurationMinutes === '' ? null : Number(maxDurationMinutes),
+        audioId, scheduleType, daysOfWeek, volume, resumePlayback, maxDurationMinutes: maxDurationMinutes === '' ? null : Number(maxDurationMinutes),
         ...(scheduleType === 'PRAYER_RELATIVE' ? { prayerName, offsetMinutes } : { fixedTime }),
       };
       if (editing) await api.patch(`/audio-schedules/${editing.id}`, payload);
@@ -161,6 +164,10 @@ export function AudioSchedulePage() {
         </div>
         <label>Volume</label>
         <div className="schedule-volume"><span aria-hidden="true">♪</span><input aria-label="Volume audio" type="range" min={0} max={100} value={volume} onChange={(e) => setVolume(Number(e.target.value))} /><output>{volume}%</output></div>
+        <div className="form-row"><div>
+          <label style={{display:'flex',alignItems:'center',gap:8}}><input style={{width:'auto'}} type="checkbox" checked={resumePlayback} onChange={e=>setResumePlayback(e.target.checked)}/>Lanjutkan dari posisi terakhir</label>
+          <p className="hint">Saat batas durasi tercapai, jadwal berikutnya melanjutkan audio yang sama. Setelah audio selesai, jadwal berikutnya mulai dari awal. Mengganti audio atau mengubah opsi ini mereset posisi.</p>
+        </div></div>
         <p className="schedule-explanation">ⓘ Audio akan mulai diputar {scheduleType === 'FIXED_TIME' ? `pukul ${fixedTime} (${timezone})` : offsetMinutes === 0 ? `tepat pada waktu ${LABELS[prayerName]}` : `${Math.abs(offsetMinutes)} menit ${offsetMinutes < 0 ? 'sebelum' : 'setelah'} waktu ${LABELS[prayerName]}`} dengan volume {volume}%. {daysOfWeek.length ? daySummary(daysOfWeek) : 'Belum ada hari dipilih'}. {maxDurationMinutes ? `Berhenti otomatis setelah ${maxDurationMinutes} menit, atau lebih awal jika audio selesai.` : 'Diputar sampai audio selesai.'}</p>
 
         <div className="form-actions"><button type="submit" disabled={saving}>{saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Tambah Jadwal'}</button>
@@ -192,7 +199,7 @@ export function AudioSchedulePage() {
                   <div className="hint">{seconds === 0 ? 'Waktunya tiba, cek status di History' : new Date(next.atUtc).toLocaleString('id-ID', { timeZone: upcoming!.timezone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}</div></>;
               })()}</td>
               <td><div className="schedule-volume-cell"><meter min={0} max={100} value={s.volume} aria-label="Volume"/>{s.volume}%</div></td>
-              <td>{s.maxDurationMinutes ? `${s.maxDurationMinutes} menit` : 'Sampai selesai'}</td>
+              <td>{s.maxDurationMinutes ? `${s.maxDurationMinutes} menit` : 'Sampai selesai'}{s.resumePlayback && <small style={{display:'block'}}>Lanjut dari {Math.floor((s.resumePositionSeconds||0)/3600).toString().padStart(2,'0')}:{Math.floor((s.resumePositionSeconds||0)%3600/60).toString().padStart(2,'0')}:{Math.floor((s.resumePositionSeconds||0)%60).toString().padStart(2,'0')}</small>}</td>
               <td><button className="chip" onClick={() => toggleActive(s)}>{s.isActive ? 'Aktif' : 'Nonaktif'}</button></td>
               <td><div className="form-actions"><button className="secondary" disabled={saving} onClick={() => edit(s)}>Edit</button><button className="danger" disabled={saving || editing?.id === s.id} onClick={() => remove(s.id)}>Hapus</button></div></td>
             </tr>

@@ -213,6 +213,9 @@ model AudioSchedule {
   scheduleType  ScheduleType
   prayerName    PrayerName?
   offsetMinutes Int?
+  resumePlayback Boolean @default(false)
+  resumePositionSeconds Float @default(0)
+  resumeHistoryId String?
   maxDurationMinutes Int?
   fixedTime     String?
   daysOfWeek    Int[]        @default([0,1,2,3,4,5,6])
@@ -282,3 +285,45 @@ model PlaybackHistory {
 }
 
 
+
+model QuotePlaylist {
+  id String @id @default(cuid())
+  name String
+  audioIds String[]
+  times String[]
+  daysOfWeek Int[]
+  volume Int @default(80)
+  isActive Boolean @default(false)
+  cycle Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  runs QuoteRun[]
+  approvals QuoteApproval[]
+}
+
+model QuoteRun {
+  id String @id
+  playlistId String
+  cycle Int
+  slot String
+  audioId String?
+  selectedAudioId String
+  audioName String
+  deviceId String
+  status String @default("LOADING")
+  playedAt DateTime?
+  createdAt DateTime @default(now())
+  playlist QuotePlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  @@unique([playlistId, slot])
+  @@unique([playlistId, cycle, audioId])
+}
+
+model QuoteApproval {
+  id String @id @default(cuid())
+  playlistId String
+  cycle Int
+  approvedBy String
+  approvedAt DateTime @default(now())
+  playlist QuotePlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  @@unique([playlistId, cycle])
+}

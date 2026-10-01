@@ -5,6 +5,7 @@ export interface AudioEngineStatus {
   volume: number;
   currentUrl: string | null;
   errorMessage?: string;
+  positionSeconds?: number;
 }
 
 /**
@@ -19,7 +20,7 @@ export interface AudioEngineStatus {
  * callback with state 'ERROR' instead.
  */
 export interface AudioEngine {
-  play(url: string, volume: number): Promise<void>;
+  play(url: string, volume: number, startPositionSeconds?: number): Promise<void>;
   stop(): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;

@@ -6,6 +6,8 @@ import { diskStorage } from 'multer';
 import type { Response } from 'express';
 import type { Express } from 'express';
 import { AudioService } from './audio.service';
+import { SpeechService } from './speech.service';
+import { SpeechDto } from './dto/speech.dto';
 import { UpdateAudioDto } from './dto/audio.dto';
 import {
   ALLOWED_AUDIO_EXTENSIONS, ALLOWED_AUDIO_MIME_TYPES, AUDIO_STORAGE_DIR, MAX_AUDIO_FILE_SIZE_BYTES,
@@ -19,7 +21,12 @@ ensureAudioStorageDir();
 
 @Controller('audio')
 export class AudioController {
-  constructor(private readonly audioService: AudioService) {}
+  constructor(private readonly audioService: AudioService, private readonly speech: SpeechService) {}
+  @Get('speech/status')
+  speechStatus() { return this.speech.status(); }
+  @Post('speech')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPERATOR)
+  generateSpeech(@Body() dto: SpeechDto) { return this.speech.generate(dto); }
 
   @Get()
   list(@Query('category') category?: AudioCategory, @Query('activeOnly') activeOnly?: string) {

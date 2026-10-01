@@ -1,3 +1,4 @@
+import { QuotePlaylistsPage } from './pages/QuotePlaylistsPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { DisplayThemesPage } from './pages/DisplayThemesPage';
 import React from 'react';
@@ -32,6 +33,7 @@ function App() {
             <Route path="/agenda" element={<AgendaPage />} />
             <Route path="/content" element={<ContentPage />} />
             <Route path="/audio" element={<AudioLibraryPage />} />
+            <Route path="/quote-playlists" element={<QuotePlaylistsPage />} />
             <Route path="/audio-schedule" element={<AudioSchedulePage />} />
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/display-themes" element={<DisplayThemesPage />} /><Route path="/history" element={<HistoryPage />} />

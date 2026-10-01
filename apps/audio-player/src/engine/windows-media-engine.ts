@@ -17,6 +17,7 @@ import { AudioEngine, AudioEngineStatus } from './audio-engine';
  */
 export class WindowsMediaEngine implements AudioEngine {
   private proc: ChildProcessWithoutNullStreams | null = null;
+  private outputBuffer = '';
   private status: AudioEngineStatus = { state: 'IDLE', volume: 80, currentUrl: null };
   private listeners: ((status: AudioEngineStatus) => void)[] = [];
 
@@ -48,13 +49,16 @@ export class WindowsMediaEngine implements AudioEngine {
       $player = New-Object -ComObject WMPLib.WindowsMediaPlayer
       $player.settings.volume = 80
       $lastState = -1
+      $seekTo = 0
+      $reader = [Console]::In.ReadLineAsync()
       while ($true) {
-        if ([Console]::In.Peek() -ge 0) {
-          $line = [Console]::In.ReadLine()
+        if ($reader.IsCompleted) {
+          $line = $reader.Result
+          $reader = [Console]::In.ReadLineAsync()
           if ($null -eq $line) { break }
           $parts = $line.Split(' ')
           switch ($parts[0]) {
-            'PLAY'   { $player.URL = $parts[1]; $player.settings.volume = [int]$parts[2]; $player.controls.play() }
+            'PLAY'   { $player.URL = $parts[1]; $player.settings.volume = [int]$parts[2]; $seekTo = [double]::Parse($parts[3], [Globalization.CultureInfo]::InvariantCulture); $lastState = -1; $player.controls.play() }
             'STOP'   { $player.controls.stop() }
             'PAUSE'  { $player.controls.pause() }
             'RESUME' { $player.controls.play() }
@@ -62,6 +66,11 @@ export class WindowsMediaEngine implements AudioEngine {
           }
         }
         $state = $player.playState
+        if ($state -eq 3 -and $seekTo -gt 0) {
+          $player.controls.currentPosition = $seekTo
+          $seekTo = 0
+        }
+        Write-Output ("POSITION " + $player.controls.currentPosition.ToString([Globalization.CultureInfo]::InvariantCulture))
         if ($state -ne $lastState) {
           Write-Output "STATE $state"
           $lastState = $state
@@ -71,7 +80,7 @@ export class WindowsMediaEngine implements AudioEngine {
     `;
 
     const proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
     });
     this.proc = proc;
 
@@ -88,7 +97,12 @@ export class WindowsMediaEngine implements AudioEngine {
 
   // WMP playState: 1=Stopped 2=Paused 3=Playing 8=MediaEnded 6=Buffering 9=Error(approx)
   private handleLine(raw: string) {
-    for (const line of raw.split('\n').map((l) => l.trim()).filter(Boolean)) {
+    this.outputBuffer += raw;
+    const lines = this.outputBuffer.split('\n');
+    this.outputBuffer = lines.pop() || '';
+    for (const line of lines.map(l => l.trim()).filter(Boolean)) {
+      const position = line.match(/^POSITION ([0-9.]+)$/);
+      if (position) { this.status.positionSeconds = Number(position[1]); continue; }
       const match = line.match(/^STATE (-?\d+)$/);
       if (!match) continue;
       const code = Number(match[1]);
@@ -107,11 +121,11 @@ export class WindowsMediaEngine implements AudioEngine {
     }
   }
 
-  async play(url: string, volume: number): Promise<void> {
+  async play(url: string, volume: number, startPositionSeconds = 0): Promise<void> {
     try {
       this.ensureProcess();
-      this.setStatus({ state: 'LOADING', currentUrl: url, volume, errorMessage: undefined });
-      this.send(`PLAY ${url} ${Math.round(Math.min(100, Math.max(0, volume)))}`);
+      this.setStatus({ state: 'LOADING', currentUrl: url, volume, positionSeconds: startPositionSeconds, errorMessage: undefined });
+      this.send(`PLAY ${url} ${Math.round(Math.min(100, Math.max(0, volume)))} ${startPositionSeconds}`);
     } catch (err) {
       this.setStatus({ state: 'ERROR', errorMessage: (err as Error).message });
     }

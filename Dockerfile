@@ -20,6 +20,7 @@ COPY packages/shared-types packages/shared-types
 RUN npm run build -w apps/${WEB_APP}
 
 FROM node:22-alpine AS api
+RUN apk add --no-cache espeak-ng
 
 WORKDIR /app
 ENV NODE_ENV=production

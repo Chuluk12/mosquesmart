@@ -44,9 +44,15 @@ export class PlayerGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     if (data?.deviceId) await this.playerService.heartbeat(data.deviceId);
   }
 
+  @SubscribeMessage('player:progress')
+  async progress(@ConnectedSocket() client: Socket, @MessageBody() data: { deviceId: string; historyId: string; positionSeconds: number }) {
+    if (!data?.deviceId || !data?.historyId || !client.rooms.has(`player:${data.deviceId}`)) return;
+    await this.playerService.saveSchedulePosition(data.deviceId, data.historyId, data.positionSeconds);
+  }
+
   @SubscribeMessage('player:status')
-  async status(@MessageBody() data: { deviceId: string; historyId?: string; status: PlaybackStatus; errorMessage?: string }) {
-    if (!data?.deviceId || !data?.status) return;
-    await this.playerService.reportStatus(data.deviceId, data.historyId, data.status, data.errorMessage);
+  async status(@ConnectedSocket() client: Socket, @MessageBody() data: { deviceId: string; historyId?: string; status: PlaybackStatus; errorMessage?: string; positionSeconds?: number }) {
+    if (!data?.deviceId || !Object.values(PlaybackStatus).includes(data?.status) || !client.rooms.has('player:' + data.deviceId)) return;
+    await this.playerService.reportStatus(data.deviceId, data.historyId, data.status, data.errorMessage, data.positionSeconds);
   }
 }

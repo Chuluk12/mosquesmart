@@ -1,3 +1,4 @@
+import { QuotePlaylistModule } from './quote-playlist/playlist.module';
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { HealthController } from './health.controller';
@@ -30,6 +31,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     AudioScheduleModule,
     PlayerModule,
     SchedulerModule,
+    QuotePlaylistModule,
     HistoryModule,
   ],
   controllers: [HealthController],

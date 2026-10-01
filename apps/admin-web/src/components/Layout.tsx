@@ -32,6 +32,7 @@ const NAV = [
   { to: '/content', label: 'Konten' },
   { to: '/audio', label: 'Audio Library' },
   { to: '/audio-schedule', label: 'Jadwal Audio' },
+  { to: '/quote-playlists', label: 'Playlist Quotes' },
   { to: '/players', label: 'Player & Play Now' },
   { to: '/history', label: 'History' },
   { to: '/display-themes', label: 'Tema Display' },

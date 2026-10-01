@@ -4,6 +4,7 @@ import { PrayerName, ScheduleType } from '@prisma/client';
 const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export class CreateAudioScheduleDto {
+  @IsOptional() @IsBoolean() resumePlayback?: boolean;
   @IsOptional() @IsInt() @Min(1) @Max(1440) maxDurationMinutes?: number | null;
   @IsString() audioId!: string;
   @IsOptional() @IsString() name?: string;
@@ -29,6 +30,7 @@ export class CreateAudioScheduleDto {
 }
 
 export class UpdateAudioScheduleDto {
+  @IsOptional() @IsBoolean() resumePlayback?: boolean;
   @IsOptional() @IsInt() @Min(1) @Max(1440) maxDurationMinutes?: number | null;
   @IsOptional() @IsString() audioId?: string;
   @IsOptional() @IsString() name?: string;

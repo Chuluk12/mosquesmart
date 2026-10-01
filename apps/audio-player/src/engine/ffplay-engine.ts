@@ -31,13 +31,13 @@ export class FfplayEngine implements AudioEngine {
     return this.status;
   }
 
-  async play(url: string, volume: number): Promise<void> {
+  async play(url: string, volume: number, startPositionSeconds = 0): Promise<void> {
     await this.killCurrent();
-    this.setStatus({ state: 'LOADING', currentUrl: url, volume, errorMessage: undefined });
+    this.setStatus({ state: 'LOADING', currentUrl: url, volume, errorMessage: undefined, positionSeconds: startPositionSeconds });
 
     try {
       const proc = spawn('ffplay', [
-        '-nodisp', '-autoexit', '-nostats', '-loglevel', 'error',
+        '-nodisp', '-autoexit', '-stats', '-loglevel', 'error', '-ss', String(startPositionSeconds),
         '-volume', String(Math.round(this.clampVolume(volume))),
         url,
       ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
@@ -46,9 +46,22 @@ export class FfplayEngine implements AudioEngine {
       this.paused = false;
 
       let sawError = '';
-      proc.stderr.on('data', (chunk) => { sawError += chunk.toString(); });
+      let pending = '';
+      proc.stderr.on('data', (chunk) => {
+        if (this.proc !== proc) return;
+        pending += chunk.toString();
+        const lines = pending.split(/[\r\n]/);
+        pending = lines.pop() || '';
+        for (const line of lines) {
+          const clock = line.match(/^\s*(\d+(?:\.\d+)?)\s+(?:(?:M-A|A-V|M-V))?:/);
+          if (clock) {
+            this.status.positionSeconds = Math.max(startPositionSeconds, Number(clock[1]));
+            if (this.status.state === 'LOADING') this.setStatus({ state: 'PLAYING' });
+          } else if (line.trim() && !/\bnan\b.*(?:(?:M-A|A-V|M-V))?:/.test(line)) sawError = (sawError + line + '\n').slice(-8192);
+        }
+      });
 
-      proc.on('spawn', () => { if (this.proc === proc) this.setStatus({ state: 'PLAYING' }); });
+      // PLAYING starts only when ffplay reports its media clock.
 
       proc.on('error', (err) => {
         if (this.proc !== proc) return;

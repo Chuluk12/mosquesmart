@@ -81,7 +81,7 @@ export class PlayerService {
    * reports back (e.g. it crashes) -- the row simply stays LOADING/ERROR
    * instead of vanishing.
    */
-  async play(deviceId: string, audioId: string, volume: number | undefined, trigger: TriggerType, scheduleId?: string, triggeredByUserId?: string, maxDurationMinutes?: number | null) {
+  async play(deviceId: string, audioId: string, volume: number | undefined, trigger: TriggerType, scheduleId?: string, triggeredByUserId?: string, maxDurationMinutes?: number | null, historyId?: string) {
     const socketId = this.socketIdFor(deviceId);
     if (!socketId) throw new NotFoundException(`Player ${deviceId} is not connected`);
 
@@ -89,8 +89,12 @@ export class PlayerService {
     const apiBaseUrl = process.env.API_PUBLIC_URL || `http://localhost:${process.env.API_PORT || 3000}`;
     const audioUrl = this.audioService.publicUrl(audio.id, apiBaseUrl);
 
+    const schedule = scheduleId ? await this.prisma.audioSchedule.findUnique({ where: { id: scheduleId } }) : null;
+    const resume = !!schedule?.resumePlayback && schedule.audioId === audioId;
+    const startPositionSeconds = resume ? schedule!.resumePositionSeconds : 0;
     const history = await this.prisma.playbackHistory.create({
       data: {
+        id: historyId,
         playerDeviceId: deviceId,
         audioId: audio.id,
         audioName: audio.name,
@@ -102,8 +106,13 @@ export class PlayerService {
       },
     });
 
+    if (resume) await this.prisma.audioSchedule.updateMany({
+      where: { id: scheduleId, audioId, resumePlayback: true },
+      data: { resumeHistoryId: history.id },
+    });
     this.server?.to(`player:${deviceId}`).emit('audio:play', {
       historyId: history.id,
+      startPositionSeconds,
       audioId: audio.id,
       audioUrl,
       volume: volume ?? 80,
@@ -150,7 +159,9 @@ export class PlayerService {
    * logged and skipped so one bad device never blocks the others.
    */
   async playOnAllOnline(audioId: string, volume: number | undefined, trigger: TriggerType, scheduleId?: string, maxDurationMinutes?: number | null) {
-    const deviceIds = [...this.connected.keys()];
+    const schedule = scheduleId ? await this.prisma.audioSchedule.findUnique({ where: { id: scheduleId } }) : null;
+    // Continuation has one checkpoint owner: only one speaker receives this schedule.
+    const deviceIds = schedule?.resumePlayback ? [...this.connected.keys()].slice(0, 1) : [...this.connected.keys()];
     const results = await Promise.allSettled(deviceIds.map((id) => this.play(id, audioId, volume, trigger, scheduleId, undefined, maxDurationMinutes)));
     results.forEach((r, i) => {
       if (r.status === 'rejected') this.logger.warn(`playOnAllOnline: ${deviceIds[i]} failed: ${(r.reason as Error).message}`);
@@ -164,13 +175,39 @@ export class PlayerService {
       orderBy: { startedAt: 'desc' },
     });
     if (open) {
+      await this.prisma.quoteRun.updateMany({ where: { id: open.id }, data: { status } });
       await this.prisma.playbackHistory.update({ where: { id: open.id }, data: { status, finishedAt: new Date() } });
     }
   }
 
+  async saveSchedulePosition(deviceId: string, historyId: string, positionSeconds?: number, finished = false) {
+    if (!finished && (typeof positionSeconds !== 'number' || !Number.isFinite(positionSeconds) || positionSeconds < 0 || positionSeconds > 31536000)) return;
+    const history = await this.prisma.playbackHistory.findFirst({ where: { id: historyId, playerDeviceId: deviceId } });
+    if (!history?.scheduleId) return;
+    await this.prisma.audioSchedule.updateMany({
+      where: { id: history.scheduleId, audioId: history.audioId ?? '', resumePlayback: true, resumeHistoryId: historyId,
+        ...(!finished ? { resumePositionSeconds: { lte: positionSeconds } } : {}) },
+      data: { resumePositionSeconds: finished ? 0 : positionSeconds, ...(finished ? { resumeHistoryId: null } : {}) },
+    });
+  }
   /** Called from the gateway when a player reports its own status. */
-  async reportStatus(deviceId: string, historyId: string | undefined, status: PlaybackStatus, errorMessage?: string) {
+  async reportStatus(deviceId: string, historyId: string | undefined, status: PlaybackStatus, errorMessage?: string, positionSeconds?: number) {
     if (historyId) {
+      const existing = await this.prisma.playbackHistory.findFirst({ where: { id: historyId, playerDeviceId: deviceId } });
+      if (!existing) return;
+      await this.saveSchedulePosition(deviceId, historyId, positionSeconds, status === PlaybackStatus.FINISHED);
+      // A quote is reserved before sending the command. Errors before playback
+      // release the audio; anything already heard stays locked for this cycle.
+      await this.prisma.quoteRun.updateMany({
+        where: { id: historyId, deviceId, status: { in: ['LOADING', 'PLAYING'] } },
+        data: { status, ...(status === PlaybackStatus.PLAYING ? { playedAt: new Date() } : {}) },
+      });
+      if (status === PlaybackStatus.ERROR) {
+        await this.prisma.quoteRun.updateMany({
+          where: { id: historyId, deviceId, playedAt: null, status: 'ERROR' },
+          data: { audioId: null },
+        });
+      }
       await this.prisma.playbackHistory.update({
         where: { id: historyId },
         data: {

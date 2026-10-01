@@ -58,8 +58,12 @@ export class AudioScheduleService {
   }
 
   async update(id: string, dto: UpdateAudioScheduleDto) {
-    await this.ensureExists(id);
-    return this.prisma.audioSchedule.update({ where: { id }, data: dto as any });
+    const current = await this.ensureExists(id);
+    const reset = (dto.audioId !== undefined && dto.audioId !== current.audioId)
+      || (dto.resumePlayback !== undefined && dto.resumePlayback !== current.resumePlayback);
+    return this.prisma.audioSchedule.update({ where: { id }, data: {
+      ...dto, ...(reset ? { resumePositionSeconds: 0, resumeHistoryId: null } : {}),
+    } });
   }
 
   async remove(id: string) {

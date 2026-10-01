@@ -1,3 +1,4 @@
+import { SpeechCreator } from '../components/SpeechCreator';
 import {Select} from '../components/Select';
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
@@ -10,6 +11,7 @@ const LABELS: Record<string,string> = { ANNOUNCEMENT:'Pengumuman', MUROTTAL:'Mur
 
 export function AudioLibraryPage() {
   const { user } = useAuth();
+  const [mode,setMode] = useState<'upload'|'speech'>('upload');
   const [query,setQuery] = useState('');
   const [filter,setFilter] = useState('');
   const [durations,setDurations] = useState<Record<string,string>>({});
@@ -35,7 +37,7 @@ export function AudioLibraryPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
   const edit = (audio: Audio) => {
-    reset(); setEditingId(audio.id); setName(audio.name); setDescription(audio.description || '');
+    setMode('upload'); reset(); setEditingId(audio.id); setName(audio.name); setDescription(audio.description || '');
     setCategory(audio.category); setError(null); setMessage('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -81,7 +83,9 @@ export function AudioLibraryPage() {
       {error && <div className="alert-error">{error}</div>}
       {message && <div className="alert-success" role="status">{message}</div>}
 
-      <div className="audio-upload-layout"><form className="form-panel form-inline" onSubmit={onSubmit}>
+      <div className="form-actions" style={{marginBottom:16}}><button type="button" className={mode==='upload'?'':'secondary'} aria-pressed={mode==='upload'} onClick={()=>setMode('upload')}>Upload File Audio</button><button type="button" className={mode==='speech'?'':'secondary'} aria-pressed={mode==='speech'} onClick={()=>setMode('speech')}>Buat Audio dari Teks</button></div>
+      <div hidden={mode!=='speech'}><SpeechCreator onSaved={()=>void load()}/></div>
+      <div hidden={mode!=='upload'}><div className="audio-upload-layout"><form className="form-panel form-inline" onSubmit={onSubmit}>
         <div className="audio-section-title"><span>↥</span><div><h2>{editingId ? 'Edit Audio' : 'Upload Audio Baru'}</h2><p>Tambahkan file audio ke library untuk digunakan pada jadwal pemutaran.</p></div></div>
         <label>Nama audio<input required={!!editingId} pattern={editingId ? '.*\\S.*' : undefined} placeholder="Nama audio" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label>Kategori audio<Select value={category} onChange={(e) => setCategory(e.target.value)}>
@@ -95,7 +99,7 @@ export function AudioLibraryPage() {
         </div>
       </form>
       <aside className="audio-info"><section><h2>▤ Informasi Format</h2><p>Format yang didukung: MP3, WAV<br/>Ukuran maksimal: 100 MB</p></section><section><h2>☷ Kategori Audio</h2>{CATEGORIES.map((c,i)=><p className="audio-category-guide" key={c}><span className={`audio-color-${i}`}>♫</span>{LABELS[c]}</p>)}</section></aside></div>
-      <section className="form-panel audio-list-panel"><div className="audio-list-header"><div className="audio-section-title"><span>♫</span><div><h2>Daftar Audio Library</h2><p>Berikut koleksi audio yang tersedia di sistem.</p></div></div><div className="audio-list-filters"><input aria-label="Cari audio" placeholder="Cari audio..." value={query} onChange={e=>setQuery(e.target.value)}/><Select aria-label="Filter kategori audio" value={filter} onChange={e=>setFilter(e.target.value)}><option value="">Semua Kategori</option>{CATEGORIES.map(c=><option key={c} value={c}>{LABELS[c]}</option>)}</Select></div></div><div className="audio-table-scroll">
+      </div><section className="form-panel audio-list-panel"><div className="audio-list-header"><div className="audio-section-title"><span>♫</span><div><h2>Daftar Audio Library</h2><p>Berikut koleksi audio yang tersedia di sistem.</p></div></div><div className="audio-list-filters"><input aria-label="Cari audio" placeholder="Cari audio..." value={query} onChange={e=>setQuery(e.target.value)}/><Select aria-label="Filter kategori audio" value={filter} onChange={e=>setFilter(e.target.value)}><option value="">Semua Kategori</option>{CATEGORIES.map(c=><option key={c} value={c}>{LABELS[c]}</option>)}</Select></div></div><div className="audio-table-scroll">
       <table className="data-table">
         <thead><tr><th>Nama Audio</th><th>Kategori</th><th>Durasi</th><th>Preview</th><th>Status</th><th>Tanggal Upload</th><th>Aksi</th></tr></thead>
         <tbody>
