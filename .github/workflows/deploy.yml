@@ -142,8 +142,12 @@ jobs:
             export IMAGE_REGISTRY="$IMAGE_NAMESPACE"
             export IMAGE_TAG="$IMAGE_TAG"
             docker compose --env-file .env pull
-            if ! docker compose --env-file .env run --rm --no-build api npm run prisma:deploy -w apps/api; then
-              echo "WARNING: Prisma migration failed. Continuing deployment; run migration manually after checking the logs."
+            echo "Running Prisma migrations with image $IMAGE_REGISTRY/api:$IMAGE_TAG"
+            if docker compose --env-file .env run --rm api npm run prisma:deploy -w apps/api; then
+              echo "Prisma migration completed successfully."
+            else
+              migration_status=$?
+              echo "WARNING: Prisma migration failed with exit code $migration_status. Continuing deployment; run migration manually after checking the output above."
             fi
             docker compose --env-file .env up -d --no-build --remove-orphans --timeout 60
             docker compose --env-file .env ps -a
