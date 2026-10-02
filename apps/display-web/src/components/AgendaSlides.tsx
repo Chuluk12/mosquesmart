@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Agenda, Content } from '../hooks/useMosqueData';
+import { Agenda, Content, PrayerToday } from '../hooks/useMosqueData';
 import { runtimeConfig } from '../lib/runtime-config';
 import './agenda-slides.css';
 
@@ -10,7 +10,7 @@ function MetaIcon({kind}:{kind:'calendar'|'clock'|'pin'}) {
 const mediaSource=(url?:string)=>url?.startsWith('/api/contents/images/')?new URL(url,new URL(runtimeConfig.apiUrl||'/api',window.location.origin)).href:url;
 
 // Use the persisted durations; prayer takeover screens unmount this slideshow.
-export function AgendaSlides({ contents = [], agendas, timezone, mosqueName, enabled, prayerSeconds = 120, agendaSeconds = 60 }: { contents?: Content[]; agendas: Agenda[]; timezone: string; mosqueName?: string; enabled: boolean; prayerSeconds?: number; agendaSeconds?: number }) {
+export function AgendaSlides({ contents = [], agendas, timezone, mosqueName, prayer, enabled, prayerSeconds = 120, agendaSeconds = 60 }: { contents?: Content[]; agendas: Agenda[]; timezone: string; mosqueName?: string; prayer: PrayerToday; enabled: boolean; prayerSeconds?: number; agendaSeconds?: number }) {
   const [slide, setSlide] = useState(0);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
@@ -47,6 +47,7 @@ export function AgendaSlides({ contents = [], agendas, timezone, mosqueName, ena
         <div><MetaIcon kind="pin"/><div className="study-meta-text"><small>TEMPAT</small><strong>{mosqueName||agenda.location||'Di mushola'}</strong>{mosqueName&&agenda.location&&agenda.location!==mosqueName&&<span>{agenda.location}</span>}</div></div>
       </div>
       <div className="study-invitation"><strong>{agenda.audience||'Mari hadiri kegiatan mushola'}</strong><p>{agenda.invitation||'Mari hadir tepat waktu dan belajar bersama.'}</p></div>
+      <div className="study-prayer-times" aria-label="Jadwal sholat hari ini">{Object.entries(prayer.effective).map(([key,t])=><div key={key} className={prayer.nextPrayer?.name===key?'selected':''}><span>{{fajr:'Subuh',dhuhr:'Dzuhur',asr:'Ashar',maghrib:'Maghrib',isha:'Isya'}[key]||key}</span><strong>{t}</strong></div>)}</div>
       <footer className="study-footer"><span>{slide} / {available.length}</span><button type="button" aria-label="Agenda sebelumnya" onClick={()=>setSlide(slide<=1?available.length:slide-1)}>&lsaquo;</button><button type="button" aria-label="Agenda berikutnya" onClick={()=>setSlide(slide>=total?0:slide+1)}>&rsaquo;</button></footer>
     </div><div className="agenda-slide-progress" style={{animationDuration:`${agendaSeconds}s`}}/>
   </section>;

@@ -16,3 +16,7 @@ export class CreatePlaylistDto extends PlaylistSettingsDto {
 export class ApproveCycleDto {
   @IsInt() @Min(1) cycle!: number;
 }
+export class UpdatePlaylistAudiosDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(500) @ArrayUnique()
+  @IsString({ each: true }) @MinLength(1, { each: true }) audioIds!: string[];
+}

@@ -85,3 +85,22 @@
 @media(min-width:1280px){.quote-times{grid-template-columns:repeat(7,minmax(0,1fr))}}
 @media(max-width:1000px){.quote-info-grid{grid-template-columns:1fr;gap:15px}.quote-schedule-strip{flex-wrap:wrap}.quote-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.quote-page .quote-volume-panel{grid-template-columns:210px 1fr}.quote-playlist-heading>.quote-actions{width:100%}}
 @media(max-width:600px){.quote-page .quote-panel{padding:15px}.quote-section-bar,.quote-editor-footer{align-items:flex-start;flex-direction:column}.quote-days{grid-template-columns:repeat(3,minmax(0,1fr))}.quote-page .quote-volume-panel{grid-template-columns:1fr;gap:15px}.quote-stats{gap:8px}.quote-stat{gap:8px;padding:12px 9px}.quote-stat .quote-icon{width:32px;height:32px;flex-basis:32px}.quote-stat strong{font-size:21px}.quote-history-filters{flex-wrap:wrap;justify-content:flex-start}.quote-history-filters>input{max-width:100%;flex:1}.quote-time-tags{flex-basis:100%}.quote-volume-readout{border-left:0;padding-left:0}.quote-times{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.quote-page .quote-danger-button{background:#fff2f3;border:1px solid #f1b9c0;color:#bf3748}
+.quote-page .quote-danger-button:hover{background:#ffe3e6}
+.quote-confirm{margin:16px 0;padding:14px;border:1px solid #f1b9c0;border-radius:9px;background:#fff7f8;font-size:12px}
+.quote-confirm p{margin:0 0 10px}
+.quote-voice-list{border:1px solid #e0eef9;border-radius:9px;padding:12px 14px;margin:16px 0}
+.quote-voice-list summary{cursor:pointer;font-size:13px;font-weight:700}
+.quote-voice-items{display:grid;gap:8px;margin-top:12px}
+.quote-voice-item{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid #e7f1f9;border-radius:8px;padding:10px 12px;background:#f8fcff}
+.quote-voice-text{min-width:0;flex:1;overflow-wrap:anywhere;font-size:12px}
+.quote-voice-text p{margin:4px 0;white-space:pre-wrap;color:#6685a7}
+.quote-voice-text small,.quote-voice-edit small,.quote-voice-confirm small{color:#7d96b0}
+.quote-voice-edit{display:grid;gap:10px;width:100%}
+.quote-voice-edit label{display:grid;gap:5px;font-size:12px;font-weight:600}
+.quote-page .quote-voice-edit input,.quote-page .quote-voice-edit textarea{width:100%;padding:9px 11px;border:1px solid #d6e6f4;border-radius:6px;background:#fff;color:#153b60;font:inherit;font-size:12px}
+.quote-voice-confirm{width:100%;margin:0}
+.quote-audio-choice{position:relative;display:flex;align-items:flex-start;gap:8px;min-width:0;flex-wrap:wrap;padding:4px;border-radius:6px}
+.quote-audio-choice>label{flex:1;min-width:0}
+.quote-page .quote-audio-delete{min-height:24px;padding:2px 7px;border:1px solid #f1c5ca;background:#fff;color:#bf3748;font-size:10px}
+.quote-audio-confirm{grid-column:1/-1;width:100%;margin:4px 0 0;padding:10px;font-size:11px}

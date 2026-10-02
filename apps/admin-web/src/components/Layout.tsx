@@ -42,6 +42,7 @@ const NAV = [
 export function Layout() {
   const { user, logout } = useAuth();
   const [mosqueName, setMosqueName] = useState('');
+  const [logoutOpen, setLogoutOpen] = useState(false);
   useEffect(() => {
     let mounted = true;
     const refresh = () => api.get<{ name: string }>('/mosque').then(m => { if (mounted) setMosqueName(m.name); }).catch(() => {});
@@ -50,7 +51,7 @@ export function Layout() {
     socket.on('mosque:updated', refresh);
     return () => { mounted = false; socket.off('mosque:updated', refresh); };
   }, []);
-  const displayUrl = (import.meta as any).env?.VITE_DISPLAY_URL || `${window.location.protocol}//${window.location.hostname}:5174`;
+  const displayUrl = (import.meta as any).env?.VITE_DISPLAY_URL || 'https://mosquesmart.aqpa-indonesia.com/';
   return (
     <div className="app">
       <aside className="reference-sidebar">
@@ -66,13 +67,21 @@ export function Layout() {
         <div className="sidebar-bottom">
           <div className="sidebar-mosque"><div className="sidebar-skyline" aria-hidden="true"><img src="/mosque-logo.svg" alt=""/><img src="/mosque-logo.svg" alt=""/><img src="/mosque-logo.svg" alt=""/></div><strong>{mosqueName || 'Mushola'}</strong><small>Rumah Allah, Rumah Kita</small></div>
           <a className="sidebar-display" href={displayUrl} target="_blank" rel="noopener noreferrer"><SidebarIcon name="display"/>Lihat Tampilan Display<span aria-hidden="true">↗</span></a>
-          <div className="sidebar-session"><span><b>{user?.name}</b><small>{user?.role?.replaceAll('_', ' ')}</small></span><button type="button" onClick={logout} title="Keluar" aria-label="Keluar dari akun"><SidebarIcon name="logout"/></button></div>
+          <div className="sidebar-session"><span><b>{user?.name}</b><small>{user?.role?.replaceAll('_', ' ')}</small></span><button type="button" onClick={() => setLogoutOpen(true)} title="Keluar" aria-label="Keluar dari akun"><SidebarIcon name="logout"/></button></div>
         </div>
       </aside>
       <main>
         <BrowserPlayer />
         <Outlet />
       </main>
+      {logoutOpen && <div className="logout-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLogoutOpen(false); }}>
+        <section className="logout-modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+          <div className="logout-modal-icon"><SidebarIcon name="logout"/></div>
+          <h2 id="logout-title">Keluar dari akun?</h2>
+          <p>Anda akan keluar dari panel admin. Jadwal dan player yang sudah berjalan tetap diproses oleh sistem.</p>
+          <div className="logout-modal-actions"><button type="button" className="secondary" onClick={() => setLogoutOpen(false)}>Batal</button><button type="button" className="logout-confirm" onClick={logout}>Ya, Keluar</button></div>
+        </section>
+      </div>}
     </div>
   );
 }

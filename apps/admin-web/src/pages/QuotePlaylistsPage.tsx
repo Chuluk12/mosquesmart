@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import './quote-playlists.css';
 import { Select } from '../components/Select';
 
-type Audio = { id: string; name: string };
+type Audio = { id: string; name: string; description?: string | null; isActive?: boolean };
 type Settings = { name: string; times: string[]; daysOfWeek: number[]; volume: number; isActive: boolean };
 type Playlist = Settings & {
   id: string; updatedAt: string; cycle: number; audioIds: string[]; audios: Audio[];
@@ -14,7 +14,7 @@ type Playlist = Settings & {
 };
 const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const defaults = (): Settings => ({
-  name: 'Quotes Harian', times: ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'],
+  name: 'Quotes Harian', times: ['08:00'],
   daysOfWeek: [1, 2, 3, 4, 5], volume: 80, isActive: false,
 });
 const statusText: Record<string, string> = { LOADING: 'Menunggu player', PLAYING: 'Sedang diputar', FINISHED: 'Selesai', STOPPED: 'Dihentikan', ERROR: 'Gagal', REVIEWED: 'Dikonfirmasi admin (terpakai)' };
@@ -42,6 +42,7 @@ export function QuotePlaylistsPage() {
   const [audios, setAudios] = useState<Audio[]>([]);
   const [form, setForm] = useState<Settings>(defaults);
   const [selected, setSelected] = useState<string[]>([]);
+  const [deleteAudioId, setDeleteAudioId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [historySearch, setHistorySearch] = useState<Record<string, string>>({});
@@ -51,6 +52,11 @@ export function QuotePlaylistsPage() {
   const [error, setError] = useState('');
   const [resolveId, setResolveId] = useState<string | null>(null);
   const [approval, setApproval] = useState<Playlist | null>(null);
+  const [deletePlaylistId, setDeletePlaylistId] = useState<string | null>(null);
+  const [removeVoiceId, setRemoveVoiceId] = useState<string | null>(null);
+  const [editingVoiceId, setEditingVoiceId] = useState<string | null>(null);
+  const [voiceTitle, setVoiceTitle] = useState('');
+  const [voiceText, setVoiceText] = useState('');
   async function load() {
     const [p, a] = await Promise.all([api.get<Playlist[]>('/quote-playlists'), api.get<Audio[]>('/audio?activeOnly=true')]);
     setPlaylists(p); setAudios(a);
@@ -95,6 +101,17 @@ export function QuotePlaylistsPage() {
       if (failures) setError(failures + ' file gagal diunggah. File yang berhasil tetap dipilih; unggah ulang hanya file yang gagal.');
     }, 'Unggah selesai. Pilih audio dan simpan playlist.');
   }
+  function startVoiceEdit(playlistId: string, audio: Audio) {
+    setEditingVoiceId(playlistId + '|' + audio.id); setVoiceTitle(audio.name); setVoiceText(audio.description || '');
+    setRemoveVoiceId(null); setError(''); setMessage('');
+  }
+  async function saveVoice(audioId: string) {
+    if (!voiceTitle.trim()) { setError('Judul voice tidak boleh kosong.'); return; }
+    await action(async () => {
+      await api.patch('/audio/' + audioId, { name: voiceTitle.trim(), description: voiceText.trim() });
+      setEditingVoiceId(null);
+    }, 'Judul dan teks voice diperbarui. File suara yang sudah direkam tetap sama.');
+  }
   const visible = audios.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
   return <div className="quote-page">
     <header><span className="hint">AUDIO</span><h1>Playlist Quotes</h1>
@@ -129,7 +146,9 @@ export function QuotePlaylistsPage() {
           <label className="quote-upload">Upload beberapa audio<input type="file" multiple accept=".mp3,.wav" onChange={e => { void upload(e.target.files); e.target.value = ''; }}/></label>
           <div className="quote-section-bar"><input aria-label="Cari audio quotes" placeholder="Cari audio..." value={search} onChange={e => setSearch(e.target.value)}/>
             <div className="quote-actions"><button type="button" className="secondary" onClick={() => setSelected(prev => [...new Set([...prev, ...visible.map(a => a.id)])])}>Pilih semua hasil</button><button type="button" className="secondary" onClick={() => setSelected([])}>Kosongkan</button><span>{selected.length} dipilih</span></div></div>
-          <div className="quote-audios">{visible.map(a => <label key={a.id}><input type="checkbox" checked={selected.includes(a.id)} onChange={e => setSelected(prev => e.target.checked ? [...prev, a.id] : prev.filter(id => id !== a.id))}/>{a.name}</label>)}
+          <div className="quote-audios">{visible.map(a => <div className="quote-audio-choice" key={a.id}><label><input type="checkbox" checked={selected.includes(a.id)} onChange={e => setSelected(prev => e.target.checked ? [...prev, a.id] : prev.filter(id => id !== a.id))}/>{a.name}</label>
+            {canApprove && <button type="button" className="quote-audio-delete" disabled={busy} onClick={() => setDeleteAudioId(a.id)}>Hapus</button>}
+            {deleteAudioId === a.id && <div className="quote-confirm quote-audio-confirm"><p>Hapus file <strong>{a.name}</strong> permanen dari Audio Library? Audio yang masih dipakai jadwal atau playlist akan ditolak.</p><div className="quote-actions"><button type="button" className="quote-danger-button" disabled={busy} onClick={() => action(async () => { await api.delete('/audio/' + a.id); setSelected(prev => prev.filter(id => id !== a.id)); setDeleteAudioId(null); }, 'Audio dihapus dari Audio Library.')}>Ya, hapus file</button><button type="button" className="secondary" onClick={() => setDeleteAudioId(null)}>Batal</button></div></div>}</div>)}
             {!visible.length && <p>Tidak ada audio yang cocok. Unggah audio atau ubah pencarian.</p>}</div>
         </section>}
         <div className="quote-editor-footer"><label className="quote-switch"><input type="checkbox" role="switch" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })}/><span/>Aktifkan playlist</label>
@@ -141,14 +160,25 @@ export function QuotePlaylistsPage() {
       <div className="quote-playlist-heading">
         <div className="quote-section-title"><QuoteIcon name="audio"/><div><div className="quote-actions"><h2>{p.name}</h2><span className={'quote-badge ' + (p.isActive ? 'FINISHED' : 'STOPPED')}>{p.isActive ? 'Aktif' : 'Nonaktif'}</span></div><p>Putaran {p.cycle}{p.updatedAt && <> · Terakhir diperbarui {new Date(p.updatedAt).toLocaleString('id-ID', { timeZone: p.timezone })}</>}</p></div></div>
         <div className="quote-actions">
-          {canEdit && <button type="button" className="secondary" disabled={busy} onClick={() => { setEditing(p.id); setForm({ name: p.name, times: [...p.times], daysOfWeek: [...p.daysOfWeek], volume: p.volume, isActive: p.isActive }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Edit Jadwal</button>}
+          {canEdit && <button type="button" className="secondary" disabled={busy} onClick={() => { setEditing(p.id); setForm({ name: p.name, times: [...p.times], daysOfWeek: [...p.daysOfWeek], volume: p.volume, isActive: p.isActive }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Edit Playlist</button>}
           {canEdit && <button type="button" className="secondary" disabled={busy} onClick={() => action(() => api.patch('/quote-playlists/' + p.id, { name: p.name, times: p.times, daysOfWeek: p.daysOfWeek, volume: p.volume, isActive: !p.isActive }), 'Status playlist diperbarui.')}>{p.isActive ? 'Nonaktifkan' : 'Aktifkan'}</button>}
           {canApprove && <button type="button" disabled={busy || p.remaining > 0 || p.pending > 0 || !p.audios.length} onClick={() => setApproval(p)}>Setujui Putar Ulang</button>}
+          {canApprove && <button type="button" className="quote-danger-button" disabled={busy} onClick={() => { setDeletePlaylistId(p.id); setApproval(null); }}>Hapus Playlist</button>}
         </div>
       </div>
+      {deletePlaylistId === p.id && <div className="quote-confirm" role="region" aria-label={'Konfirmasi hapus playlist ' + p.name}>
+        <p>Hapus playlist <strong>{p.name}</strong> beserta riwayat dan persetujuan ulangnya? File voice tetap tersimpan di Audio Library.</p>
+        <div className="quote-actions"><button type="button" className="quote-danger-button" disabled={busy} onClick={() => action(async () => { await api.delete('/quote-playlists/' + p.id); setDeletePlaylistId(null); if (editing === p.id) reset(); }, 'Playlist dihapus.')}>Ya, hapus playlist</button><button type="button" className="secondary" onClick={() => setDeletePlaylistId(null)}>Batal</button></div>
+      </div>}
       <div className="quote-stats">
         {[{ value: p.audioIds.length, label: 'Total audio', icon: 'audio', tone: 'blue' }, { value: p.remaining, label: 'Tersedia', icon: 'stock', tone: 'orange' }, { value: p.usedCount, label: 'Terpakai / dicadangkan', icon: 'play', tone: 'green' }, { value: p.pending, label: 'Menunggu / diputar', icon: 'clock', tone: 'purple' }].map(stat => <div className={'quote-stat ' + stat.tone} key={stat.label}><QuoteIcon name={stat.icon} tone={stat.tone}/><div><strong>{stat.value}</strong><span>{stat.label}</span></div></div>)}
       </div>
+      <details className="quote-voice-list"><summary>Daftar Voice ({p.audios.length})</summary>
+        <div className="quote-voice-items">{p.audios.map(a => <div className="quote-voice-item" key={a.id}>
+          {editingVoiceId === p.id + '|' + a.id ? <div className="quote-voice-edit"><label>Judul voice<input maxLength={150} value={voiceTitle} onChange={e => setVoiceTitle(e.target.value)}/></label><label>Teks quotes / deskripsi<textarea rows={3} value={voiceText} onChange={e => setVoiceText(e.target.value)}/></label><small>Mengubah teks di sini tidak mengubah suara pada file rekaman.</small><div className="quote-actions"><button type="button" disabled={busy || !voiceTitle.trim()} onClick={() => void saveVoice(a.id)}>Simpan</button><button type="button" className="secondary" onClick={() => setEditingVoiceId(null)}>Batal</button></div></div> : <><div className="quote-voice-text"><strong>{a.name}</strong>{a.description && <p>{a.description}</p>}{a.isActive === false && <small>Nonaktif di Audio Library</small>}</div>{canEdit && <div className="quote-actions"><button type="button" className="secondary" disabled={busy} onClick={() => startVoiceEdit(p.id, a)}>Edit judul / teks</button><button type="button" className="quote-danger-button" disabled={busy} onClick={() => { setRemoveVoiceId(p.id + '|' + a.id); setEditingVoiceId(null); }}>Hapus dari playlist</button></div>}</>}
+          {removeVoiceId === p.id + '|' + a.id && <div className="quote-confirm quote-voice-confirm"><p>Keluarkan <strong>{a.name}</strong> dari playlist {p.name}? File tetap ada di Audio Library.</p><div className="quote-actions"><button type="button" className="quote-danger-button" disabled={busy || p.audioIds.length <= 1} onClick={() => action(async () => { await api.patch('/quote-playlists/' + p.id + '/audios', { audioIds: p.audioIds.filter(id => id !== a.id) }); setRemoveVoiceId(null); }, 'Voice dikeluarkan dari playlist.')}>Ya, keluarkan</button><button type="button" className="secondary" onClick={() => setRemoveVoiceId(null)}>Batal</button></div>{p.audioIds.length <= 1 && <small>Playlist harus memiliki minimal satu voice. Hapus playlist jika sudah tidak digunakan.</small>}</div>}
+        </div>)}</div>
+      </details>
       <div className="quote-schedule-strip"><SectionTitle icon="calendar" title="Jadwal Pemutaran" description={p.daysOfWeek.map(d => DAYS[d]).join(', ')}/>
         <div className="quote-time-tags">{p.times.map(t => <span key={t}>{t}</span>)}</div>
         <div className="quote-volume-readout"><span>Volume <strong>{p.volume}%</strong></span><meter aria-label="Volume playlist" min={0} max={100} value={p.volume}/><small>{p.timezone}</small></div>

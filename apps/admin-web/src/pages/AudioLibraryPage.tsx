@@ -30,7 +30,11 @@ export function AudioLibraryPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = () => api.get<Audio[]>('/audio').then(setItems).catch((err) => setError(err.message));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const syncTimer = window.setInterval(load, 30_000);
+    return () => window.clearInterval(syncTimer);
+  }, []);
 
   const reset = () => {
     setEditingId(null); setName(''); setDescription(''); setCategory('GENERAL'); setFile(null);

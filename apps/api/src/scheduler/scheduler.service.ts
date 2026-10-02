@@ -81,30 +81,33 @@ export class SchedulerService implements OnModuleInit {
         plannedTime = addMinutesToTimeString(base, schedule.offsetMinutes ?? 0);
       }
 
-      if (!plannedTime || plannedTime !== time) continue;
+      if (!plannedTime) continue;
+
+      const plannedMinutes = Number(plannedTime.slice(0, 2)) * 60 + Number(plannedTime.slice(3));
+      const nowMinutes = Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+      const minutesLate = nowMinutes - plannedMinutes;
+      if (minutesLate < 0 || minutesLate > 5) continue;
 
       await this.tryDispatch(schedule.id, date, plannedTime, schedule.audioId, schedule.volume, schedule.maxDurationMinutes);
     }
   }
 
   private async tryDispatch(scheduleId: string, date: string, plannedTime: string, audioId: string, volume: number, maxDurationMinutes: number | null) {
-    // The unique constraint on (scheduleId, plannedDate) is the actual lock:
-    // if two ticks race here, only one INSERT succeeds.
+    // FAILED executions remain retryable during the grace window.
     try {
-      await this.prisma.scheduleExecution.create({
-        data: { scheduleId, plannedDate: new Date(date), plannedTime, status: 'DISPATCHED' },
-      });
+      const existing = await this.prisma.scheduleExecution.findUnique({ where: { scheduleId_plannedDate: { scheduleId, plannedDate: new Date(date) } } });
+      if (existing?.status === 'DISPATCHED' || existing?.status === 'DONE') return;
+      if (existing) await this.prisma.scheduleExecution.update({ where: { id: existing.id }, data: { status: 'DISPATCHED' } });
+      else await this.prisma.scheduleExecution.create({ data: { scheduleId, plannedDate: new Date(date), plannedTime, status: 'DISPATCHED' } });
     } catch (err: any) {
-      if (err?.code === 'P2002') return; // already dispatched for today by another tick
+      if (err?.code === 'P2002' || err?.code === 'P2034') return;
       throw err;
     }
 
     try {
       const result = await this.playerService.playOnAllOnline(audioId, volume, TriggerType.SCHEDULE, scheduleId, maxDurationMinutes);
       this.logger.log(`Dispatched schedule ${scheduleId} at ${plannedTime} to ${result.targeted} player(s)`);
-      if (result.targeted === 0) {
-        this.logger.warn(`Schedule ${scheduleId} fired but no players are online`);
-      }
+      if (result.targeted === 0) throw new Error('No player is online; execution will be retried');
     } catch (err) {
       this.logger.error(`Dispatch failed for schedule ${scheduleId}: ${(err as Error).message}`);
       await this.prisma.scheduleExecution.updateMany({

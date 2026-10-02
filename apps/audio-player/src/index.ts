@@ -3,6 +3,8 @@ import 'dotenv/config';
 import { io, Socket } from 'socket.io-client';
 import { createAudioEngine } from './engine/engine-factory';
 import { AudioEngineStatus } from './engine/audio-engine';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 const url = process.env.PLAYER_SOCKET_URL || 'http://localhost:3000/player';
 const deviceId = process.env.PLAYER_DEVICE_ID || 'player-main';
@@ -15,6 +17,21 @@ const playbackLimit = new PlaybackLimit(() => {
   void engine.stop().catch(err => log('duration stop error:', err.message));
 });
 let playQueue = Promise.resolve();
+const stateFile = resolve(process.env.PLAYER_STATE_FILE || '.player-state.json');
+type PendingStatus = { deviceId: string; historyId?: string; status: string; errorMessage?: string; positionSeconds?: number };
+let pendingStatuses: PendingStatus[] = [];
+let registered = false;
+try { if (existsSync(stateFile)) pendingStatuses = JSON.parse(readFileSync(stateFile, 'utf8')); } catch { pendingStatuses = []; }
+function persistStatuses() { try { mkdirSync(dirname(stateFile), { recursive: true }); writeFileSync(stateFile, JSON.stringify(pendingStatuses.slice(-200))); } catch (err) { log('state save failed:', (err as Error).message); } }
+function sendStatus(payload: PendingStatus) {
+  if (!socket.connected || !registered) { pendingStatuses.push(payload); persistStatuses(); return; }
+  socket.emit('player:status', payload);
+}
+function flushStatuses() {
+  if (!socket.connected || !pendingStatuses.length) return;
+  const queued = pendingStatuses; pendingStatuses = []; persistStatuses();
+  queued.forEach(payload => socket.emit('player:status', payload));
+}
 
 const socket: Socket = io(url, {
   reconnection: true,
@@ -35,7 +52,7 @@ function reportStatus(status: AudioEngineStatus) {
   };
   const backendStatus = map[status.state];
   if (!backendStatus) return; // PAUSED/IDLE have no PlaybackStatus equivalent server-side
-  socket.emit('player:status', {
+  sendStatus({
     deviceId,
     historyId: currentHistoryId ?? undefined,
     status: backendStatus,
@@ -55,11 +72,12 @@ socket.on('connect', () => {
 });
 
 socket.on('player:registered', (ack: { ok: boolean; error?: string }) => {
-  if (ack?.ok) log('registered successfully');
+  if (ack?.ok) { registered = true; log('registered successfully'); flushStatuses(); }
   else log('registration failed:', ack?.error);
 });
 
 socket.on('disconnect', (reason) => {
+  registered = false;
   log('disconnected from backend:', reason, '- will auto-reconnect');
 });
 
@@ -80,7 +98,7 @@ socket.on('audio:play', (payload: { historyId: string; audioId: string; audioUrl
     // Defense in depth: even if an engine implementation misbehaves and
     // throws, the process must keep running.
     log('unexpected error starting playback:', (err as Error).message);
-    socket.emit('player:status', { deviceId, historyId: currentHistoryId, status: 'ERROR', errorMessage: (err as Error).message });
+    sendStatus({ deviceId, historyId: currentHistoryId, status: 'ERROR', errorMessage: (err as Error).message });
     playbackLimit.clear();
     currentHistoryId = null;
   }

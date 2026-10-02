@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -47,6 +47,20 @@ export class AudioService {
 
   async remove(id: string) {
     const audio = await this.findOne(id);
+    const [activeSchedules, playlists, pendingPlayback] = await Promise.all([
+      this.prisma.audioSchedule.count({ where: { audioId: id, isActive: true } }),
+      this.prisma.quotePlaylist.findMany({ select: { id: true, name: true, audioIds: true } }),
+      this.prisma.playbackHistory.count({ where: { audioId: id, status: { in: ['LOADING', 'PLAYING'] } } }),
+    ]);
+    const linkedPlaylists = playlists.filter(playlist => playlist.audioIds.includes(id));
+    if (activeSchedules || linkedPlaylists.length || pendingPlayback) {
+      const users = [
+        activeSchedules ? 'jadwal audio aktif' : '',
+        linkedPlaylists.length ? 'playlist ' + linkedPlaylists.map(playlist => playlist.name).join(', ') : '',
+        pendingPlayback ? 'pemutaran yang sedang berjalan' : '',
+      ].filter(Boolean).join(', ');
+      throw new BadRequestException('Audio masih digunakan oleh ' + users + '. Lepaskan dari jadwal atau playlist terlebih dahulu.');
+    }
     const fullPath = join(AUDIO_STORAGE_DIR, audio.filePath);
     if (existsSync(fullPath)) {
       try { unlinkSync(fullPath); } catch { /* best-effort cleanup; DB row removal is what matters */ }

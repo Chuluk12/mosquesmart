@@ -54,7 +54,11 @@ export function AudioSchedulePage() {
     api.get<AudioSchedule[]>('/audio-schedules').then(setItems).catch((err) => setError(err.message));
     api.get<Audio[]>('/audio?activeOnly=true').then(setAudios).catch(err => setError(err.message));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const syncTimer = window.setInterval(load, 30_000);
+    return () => window.clearInterval(syncTimer);
+  }, []);
 
   const reset = () => {
     setDaysOfWeek(ALL_DAYS);
