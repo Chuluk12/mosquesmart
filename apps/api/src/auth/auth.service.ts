@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { createHash, randomBytes } from 'node:crypto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -22,13 +23,26 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
 
-    const payload = { sub: user.id, username: user.username, role: user.role };
+    const sessionToken = randomBytes(32).toString('hex');
+    const sessionId = createHash('sha256').update(sessionToken).digest('hex');
+    await this.prisma.adminSession.create({ data: { id: sessionId, userId: user.id } });
+    const payload = { sub: user.id, username: user.username, role: user.role, sid: sessionToken };
     const accessToken = await this.jwt.signAsync(payload);
 
     return {
       accessToken,
       user: { id: user.id, name: user.name, username: user.username, role: user.role },
     };
+  }
+
+  async logout(userId: string, sessionId?: string) {
+    if (sessionId) {
+      await this.prisma.adminSession.updateMany({
+        where: { id: sessionId, userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    return { ok: true };
   }
 
   async me(userId: string) {

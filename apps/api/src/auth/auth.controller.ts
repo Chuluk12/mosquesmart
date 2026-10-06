@@ -29,8 +29,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  logout() {
-    // JWTs are stateless; logout is handled client-side by discarding the token.
-    return { ok: true };
+  logout(@CurrentUser() user: AuthUser) {
+    return this.authService.logout(user.sub, user.sessionId);
   }
 }
