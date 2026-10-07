@@ -12,6 +12,12 @@ const name = process.env.PLAYER_NAME || 'Main Amplifier Player';
 
 const engine = createAudioEngine();
 let currentHistoryId: string | null = null;
+let repeatsRemaining = 1;
+let sequenceTracks: { historyId: string; audioUrl: string }[] = [];
+let sequenceIndex = 0;
+let sequenceVolume = 80;
+let repeatTotal = 1;
+let repeatSource: { url: string; volume: number } | null = null;
 const playbackLimit = new PlaybackLimit(() => {
   log('Batas durasi tercapai; menghentikan audio');
   void engine.stop().catch(err => log('duration stop error:', err.message));
@@ -45,6 +51,25 @@ function log(...args: unknown[]) {
 }
 
 function reportStatus(status: AudioEngineStatus) {
+  if (status.state === 'FINISHED' && sequenceTracks.length) {
+    const next = sequenceTracks[sequenceIndex + 1];
+    if (next) {
+      if (next.historyId !== currentHistoryId && currentHistoryId) sendStatus({ deviceId, historyId: currentHistoryId, status: 'FINISHED', positionSeconds: status.positionSeconds });
+      sequenceIndex++;
+      currentHistoryId = next.historyId;
+      void engine.play(next.audioUrl, sequenceVolume, 0);
+      return;
+    }
+    sequenceTracks = [];
+    sequenceIndex = 0;
+  }
+
+  if (status.state === 'FINISHED' && repeatsRemaining > 1 && currentHistoryId && repeatSource) {
+    repeatsRemaining--;
+    log('Audio finished; repeating', repeatTotal - repeatsRemaining + 1, '/', repeatTotal);
+    void engine.play(repeatSource.url, repeatSource.volume, 0);
+    return;
+  }
   playbackLimit.update(status.state);
   const map: Record<AudioEngineStatus['state'], string | null> = {
     IDLE: null, LOADING: 'LOADING', PLAYING: 'PLAYING', PAUSED: null,
@@ -60,7 +85,16 @@ function reportStatus(status: AudioEngineStatus) {
     positionSeconds: status.positionSeconds,
   });
   if (backendStatus === 'FINISHED' || backendStatus === 'STOPPED' || backendStatus === 'ERROR') {
+    if (sequenceTracks.length) {
+      const terminalStatus = backendStatus === 'ERROR' ? 'ERROR' : 'STOPPED';
+      const pendingHistoryIds = [...new Set(sequenceTracks.slice(sequenceIndex + 1).map(track => track.historyId))];
+      pendingHistoryIds.filter(id => id !== currentHistoryId).forEach(historyId => sendStatus({ deviceId, historyId, status: terminalStatus }));
+      sequenceTracks = [];
+      sequenceIndex = 0;
+    }
     currentHistoryId = null;
+    repeatsRemaining = 1;
+    repeatSource = null;
   }
 }
 
@@ -85,12 +119,16 @@ socket.on('connect_error', (err) => {
   log('connection error (will retry):', err.message);
 });
 
-socket.on('audio:play', (payload: { historyId: string; audioId: string; audioUrl: string; volume: number; maxDurationMinutes?: number | null; startPositionSeconds?: number }) => {
+socket.on('audio:play', (payload: { historyId: string; audioId: string; audioUrl: string; volume: number; maxDurationMinutes?: number | null; startPositionSeconds?: number; repeatCount?: number }) => {
   playQueue = playQueue.then(async () => {
   playbackLimit.clear();
+  sequenceTracks = []; sequenceIndex = 0;
   if (currentHistoryId) await engine.stop();
-  log('PLAY received:', payload.audioUrl, 'volume', payload.volume);
+  log('PLAY received:', payload.audioUrl, 'volume', payload.volume, 'repeatCount', payload.repeatCount ?? 1);
   currentHistoryId = payload.historyId;
+  repeatsRemaining = Math.max(1, Math.floor(payload.repeatCount || 1));
+  repeatTotal = repeatsRemaining;
+  repeatSource = { url: payload.audioUrl, volume: payload.volume ?? 80 };
   playbackLimit.configure(payload.maxDurationMinutes);
   try {
     await engine.play(payload.audioUrl, payload.volume ?? 80, Math.max(0, payload.startPositionSeconds || 0));
@@ -101,8 +139,29 @@ socket.on('audio:play', (payload: { historyId: string; audioId: string; audioUrl
     sendStatus({ deviceId, historyId: currentHistoryId, status: 'ERROR', errorMessage: (err as Error).message });
     playbackLimit.clear();
     currentHistoryId = null;
+    repeatsRemaining = 1;
+    repeatSource = null;
   }
   }).catch(err => { playbackLimit.clear(); log('play command error:', err.message); });
+});
+
+socket.on('audio:play-sequence', (payload: { tracks: { historyId: string; audioId: string; audioUrl: string }[]; volume: number; maxDurationMinutes?: number | null; repeatCount?: number }) => {
+  playQueue = playQueue.then(async () => {
+    playbackLimit.clear();
+    if (currentHistoryId) await engine.stop();
+    sequenceTracks = [];
+    if (!payload.tracks.length) return;
+    const repeats = Math.max(1, Math.floor(payload.repeatCount || 1));
+    sequenceTracks = Array.from({ length: repeats }, () => payload.tracks.map(track => ({ historyId: track.historyId, audioUrl: track.audioUrl }))).flat();
+    sequenceIndex = 0;
+    sequenceVolume = payload.volume ?? 80;
+    repeatsRemaining = 1;
+    repeatSource = null;
+    currentHistoryId = sequenceTracks[0].historyId;
+    playbackLimit.configure(payload.maxDurationMinutes);
+    log('SEQUENCE received:', payload.tracks.length, 'files,', repeats, 'round(s)');
+    await engine.play(sequenceTracks[0].audioUrl, payload.volume ?? 80, 0);
+  }).catch(err => { playbackLimit.clear(); sequenceTracks = []; log('sequence play error:', err.message); });
 });
 
 socket.on('audio:stop', async () => {

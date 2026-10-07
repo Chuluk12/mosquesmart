@@ -6,7 +6,9 @@ const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 export class CreateAudioScheduleDto {
   @IsOptional() @IsBoolean() resumePlayback?: boolean;
   @IsOptional() @IsInt() @Min(1) @Max(1440) maxDurationMinutes?: number | null;
+  @IsOptional() @IsInt() @Min(1) @Max(100) repeatCount?: number;
   @IsString() audioId!: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @ArrayUnique() @IsString({ each: true }) audioIds?: string[];
   @IsOptional() @IsString() name?: string;
   @IsEnum(ScheduleType) scheduleType!: ScheduleType;
 
@@ -32,7 +34,9 @@ export class CreateAudioScheduleDto {
 export class UpdateAudioScheduleDto {
   @IsOptional() @IsBoolean() resumePlayback?: boolean;
   @IsOptional() @IsInt() @Min(1) @Max(1440) maxDurationMinutes?: number | null;
+  @IsOptional() @IsInt() @Min(1) @Max(100) repeatCount?: number;
   @IsOptional() @IsString() audioId?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @ArrayUnique() @IsString({ each: true }) audioIds?: string[];
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsEnum(ScheduleType) scheduleType?: ScheduleType;
   @IsOptional() @IsEnum(PrayerName) prayerName?: PrayerName;

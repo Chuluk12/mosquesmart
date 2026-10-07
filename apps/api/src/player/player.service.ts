@@ -81,7 +81,7 @@ export class PlayerService {
    * reports back (e.g. it crashes) -- the row simply stays LOADING/ERROR
    * instead of vanishing.
    */
-  async play(deviceId: string, audioId: string, volume: number | undefined, trigger: TriggerType, scheduleId?: string, triggeredByUserId?: string, maxDurationMinutes?: number | null, historyId?: string) {
+  async play(deviceId: string, audioId: string, volume: number | undefined, trigger: TriggerType, scheduleId?: string, triggeredByUserId?: string, maxDurationMinutes?: number | null, historyId?: string, repeatCount = 1) {
     const socketId = this.socketIdFor(deviceId);
     if (!socketId) throw new NotFoundException(`Player ${deviceId} is not connected`);
 
@@ -117,10 +117,39 @@ export class PlayerService {
       audioUrl,
       volume: volume ?? 80,
       maxDurationMinutes: maxDurationMinutes ?? null,
+      repeatCount,
     });
 
     this.realtime.emit('player:command', { deviceId, command: 'PLAY', audioName: audio.name });
     return { accepted: true, deviceId, command: 'PLAY', historyId: history.id };
+  }
+
+
+  async playSequenceOnAllOnline(audioIds: string[], volume: number, trigger: TriggerType, scheduleId?: string, maxDurationMinutes?: number | null, repeatCount = 1) {
+    const sequence = [...new Set(audioIds)];
+    if (sequence.length <= 1) return this.playOnAllOnline(sequence[0], volume, trigger, scheduleId, maxDurationMinutes, repeatCount);
+
+    const schedule = scheduleId ? await this.prisma.audioSchedule.findUnique({ where: { id: scheduleId } }) : null;
+    const deviceIds = schedule?.resumePlayback ? [...this.connected.keys()].slice(0, 1) : [...this.connected.keys()];
+    const audios = await Promise.all(sequence.map(id => this.audioService.findOne(id)));
+    const apiBaseUrl = process.env.API_PUBLIC_URL || 'http://localhost:' + (process.env.API_PORT || 3000);
+    const results = await Promise.allSettled(deviceIds.map(async deviceId => {
+      const tracks: { historyId: string; audioId: string; audioUrl: string }[] = [];
+      for (const audio of audios) {
+        const history = await this.prisma.playbackHistory.create({ data: {
+          playerDeviceId: deviceId, audioId: audio.id, audioName: audio.name, scheduleId,
+          triggerType: trigger, status: PlaybackStatus.LOADING, plannedAt: new Date(),
+        } });
+        tracks.push({ historyId: history.id, audioId: audio.id, audioUrl: this.audioService.publicUrl(audio.id, apiBaseUrl) });
+      }
+      this.server?.to('player:' + deviceId).emit('audio:play-sequence', {
+        tracks, volume: volume ?? 80, maxDurationMinutes: maxDurationMinutes ?? null, repeatCount,
+      });
+      this.realtime.emit('player:command', { deviceId, command: 'PLAY', audioName: audios.map(a => a.name).join(' → ') });
+      return { accepted: true, deviceId, trackCount: tracks.length };
+    }));
+    results.forEach((result, i) => { if (result.status === 'rejected') this.logger.warn('playSequenceOnAllOnline: ' + deviceIds[i] + ' failed: ' + (result.reason as Error).message); });
+    return { targeted: deviceIds.length, results };
   }
 
   async stop(deviceId: string) {
@@ -158,11 +187,11 @@ export class PlayerService {
    * that is online right now. A player that is offline or errors out is
    * logged and skipped so one bad device never blocks the others.
    */
-  async playOnAllOnline(audioId: string, volume: number | undefined, trigger: TriggerType, scheduleId?: string, maxDurationMinutes?: number | null) {
+  async playOnAllOnline(audioId: string, volume: number | undefined, trigger: TriggerType, scheduleId?: string, maxDurationMinutes?: number | null, repeatCount = 1) {
     const schedule = scheduleId ? await this.prisma.audioSchedule.findUnique({ where: { id: scheduleId } }) : null;
     // Continuation has one checkpoint owner: only one speaker receives this schedule.
     const deviceIds = schedule?.resumePlayback ? [...this.connected.keys()].slice(0, 1) : [...this.connected.keys()];
-    const results = await Promise.allSettled(deviceIds.map((id) => this.play(id, audioId, volume, trigger, scheduleId, undefined, maxDurationMinutes)));
+    const results = await Promise.allSettled(deviceIds.map((id) => this.play(id, audioId, volume, trigger, scheduleId, undefined, maxDurationMinutes, undefined, repeatCount)));
     results.forEach((r, i) => {
       if (r.status === 'rejected') this.logger.warn(`playOnAllOnline: ${deviceIds[i]} failed: ${(r.reason as Error).message}`);
     });

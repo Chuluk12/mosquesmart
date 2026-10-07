@@ -1,0 +1,1 @@
+ALTER TABLE "AudioSchedule" ADD COLUMN "audioIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

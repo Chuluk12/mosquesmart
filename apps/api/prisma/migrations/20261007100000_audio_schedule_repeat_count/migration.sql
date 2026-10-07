@@ -1,0 +1,1 @@
+ALTER TABLE "AudioSchedule" ADD COLUMN "repeatCount" INTEGER NOT NULL DEFAULT 1;

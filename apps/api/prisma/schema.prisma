@@ -220,6 +220,7 @@ model Audio {
 model AudioSchedule {
   id            String       @id @default(cuid())
   audioId       String
+  audioIds      String[]     @default([])
   name          String       @default("Schedule")
   scheduleType  ScheduleType
   prayerName    PrayerName?
@@ -228,6 +229,7 @@ model AudioSchedule {
   resumePositionSeconds Float @default(0)
   resumeHistoryId String?
   maxDurationMinutes Int?
+  repeatCount Int @default(1)
   fixedTime     String?
   daysOfWeek    Int[]        @default([0,1,2,3,4,5,6])
   startDate     DateTime?

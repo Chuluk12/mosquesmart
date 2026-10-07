@@ -48,7 +48,7 @@ export class AudioService {
   async remove(id: string) {
     const audio = await this.findOne(id);
     const [activeSchedules, playlists, pendingPlayback] = await Promise.all([
-      this.prisma.audioSchedule.count({ where: { audioId: id, isActive: true } }),
+      this.prisma.audioSchedule.count({ where: { OR: [{ audioId: id }, { audioIds: { has: id } }] } }),
       this.prisma.quotePlaylist.findMany({ select: { id: true, name: true, audioIds: true } }),
       this.prisma.playbackHistory.count({ where: { audioId: id, status: { in: ['LOADING', 'PLAYING'] } } }),
     ]);

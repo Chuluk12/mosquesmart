@@ -34,7 +34,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 401) {
     setToken(null);
-    if (!location.pathname.startsWith('/login')) location.href = '/login';
+    if (!location.pathname.startsWith('/login') && location.pathname !== '/audio-schedule-public') location.href = '/login';
     throw new ApiError(401, 'Sesi berakhir, silakan login kembali.');
   }
 

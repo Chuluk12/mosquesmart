@@ -88,11 +88,11 @@ export class SchedulerService implements OnModuleInit {
       const minutesLate = nowMinutes - plannedMinutes;
       if (minutesLate < 0 || minutesLate > 5) continue;
 
-      await this.tryDispatch(schedule.id, date, plannedTime, schedule.audioId, schedule.volume, schedule.maxDurationMinutes);
+      await this.tryDispatch(schedule.id, date, plannedTime, (schedule.audioIds?.length ? schedule.audioIds : [schedule.audioId]), schedule.volume, schedule.maxDurationMinutes, schedule.repeatCount);
     }
   }
 
-  private async tryDispatch(scheduleId: string, date: string, plannedTime: string, audioId: string, volume: number, maxDurationMinutes: number | null) {
+  private async tryDispatch(scheduleId: string, date: string, plannedTime: string, audioIds: string[], volume: number, maxDurationMinutes: number | null, repeatCount: number) {
     // FAILED executions remain retryable during the grace window.
     try {
       const existing = await this.prisma.scheduleExecution.findUnique({ where: { scheduleId_plannedDate: { scheduleId, plannedDate: new Date(date) } } });
@@ -105,8 +105,8 @@ export class SchedulerService implements OnModuleInit {
     }
 
     try {
-      const result = await this.playerService.playOnAllOnline(audioId, volume, TriggerType.SCHEDULE, scheduleId, maxDurationMinutes);
-      this.logger.log(`Dispatched schedule ${scheduleId} at ${plannedTime} to ${result.targeted} player(s)`);
+      const result = await this.playerService.playSequenceOnAllOnline(audioIds, volume, TriggerType.SCHEDULE, scheduleId, maxDurationMinutes, repeatCount);
+      this.logger.log(`Dispatched schedule ${scheduleId} at ${plannedTime} to ${result.targeted} player(s), repeatCount=${repeatCount}`);
       if (result.targeted === 0) throw new Error('No player is online; execution will be retried');
     } catch (err) {
       this.logger.error(`Dispatch failed for schedule ${scheduleId}: ${(err as Error).message}`);

@@ -1,4 +1,5 @@
 import {Select} from '../components/Select';
+import { BrowserPlayer } from '../components/BrowserPlayer';
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,7 +7,7 @@ import './audio-schedule.css';
 
 interface Audio { id: string; name: string }
 interface AudioSchedule {
-  id: string; audioId: string; maxDurationMinutes?: number | null; resumePlayback?: boolean; resumePositionSeconds?: number; audio?: Audio; scheduleType: 'FIXED_TIME' | 'PRAYER_RELATIVE';
+  id: string; audioId: string; audioIds?: string[]; repeatCount?: number; maxDurationMinutes?: number | null; resumePlayback?: boolean; resumePositionSeconds?: number; audio?: Audio; scheduleType: 'FIXED_TIME' | 'PRAYER_RELATIVE';
   daysOfWeek?: number[]; prayerName?: string; offsetMinutes?: number; fixedTime?: string; volume: number; isActive: boolean;
 }
 
@@ -17,7 +18,8 @@ const PRAYERS = ['FAJR', 'DHUHR', 'ASR', 'MAGHRIB', 'ISHA'];
 const LABELS: Record<string,string> = { FAJR:'Subuh', DHUHR:'Dzuhur', ASR:'Ashar', MAGHRIB:'Maghrib', ISHA:'Isya' };
 interface Upcoming { serverNow: string; timezone: string; items: { id: string; atUtc: string | null; reason: string | null }[] }
 
-export function AudioSchedulePage() {
+export function AudioSchedulePage({ publicMode = false }: { publicMode?: boolean }) {
+  const scheduleEndpoint = publicMode ? '/public/audio-schedules' : '/audio-schedules';
   const { user } = useAuth();
   const [query,setQuery] = useState('');
   const [filter,setFilter] = useState('');
@@ -26,7 +28,7 @@ export function AudioSchedulePage() {
   const [clock, setClock] = useState(Date.now());
   const [clockOffset, setClockOffset] = useState(0);
   const [countdownError, setCountdownError] = useState(false);
-  const refreshCountdown = () => api.get<Upcoming>('/audio-schedules/upcoming').then(data => {
+  const refreshCountdown = () => api.get<Upcoming>(`${scheduleEndpoint}/upcoming`).then(data => {
     setUpcoming(data); setClockOffset(Date.parse(data.serverNow) - Date.now()); setCountdownError(false);
   }).catch(() => setCountdownError(true));
   useEffect(() => {
@@ -40,6 +42,7 @@ export function AudioSchedulePage() {
   const [audios, setAudios] = useState<Audio[]>([]);
   const [scheduleType, setScheduleType] = useState<'FIXED_TIME' | 'PRAYER_RELATIVE'>('PRAYER_RELATIVE');
   const [audioId, setAudioId] = useState('');
+  const [selectedAudioIds, setSelectedAudioIds] = useState<string[]>([]);
   const [prayerName, setPrayerName] = useState('DHUHR');
   const [offsetMinutes, setOffsetMinutes] = useState(-10);
   const [fixedTime, setFixedTime] = useState('07:30');
@@ -47,12 +50,13 @@ export function AudioSchedulePage() {
   const [volume, setVolume] = useState(80);
   const [resumePlayback, setResumePlayback] = useState(false);
   const [maxDurationMinutes, setMaxDurationMinutes] = useState('');
+  const [repeatCount, setRepeatCount] = useState('1');
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
     void refreshCountdown();
-    api.get<AudioSchedule[]>('/audio-schedules').then(setItems).catch((err) => setError(err.message));
-    api.get<Audio[]>('/audio?activeOnly=true').then(setAudios).catch(err => setError(err.message));
+    api.get<AudioSchedule[]>(scheduleEndpoint).then(setItems).catch((err) => setError(err.message));
+    api.get<Audio[]>(publicMode ? `${scheduleEndpoint}/audios` : '/audio?activeOnly=true').then(setAudios).catch(err => setError(err.message));
   };
   useEffect(() => {
     load();
@@ -64,14 +68,16 @@ export function AudioSchedulePage() {
     setDaysOfWeek(ALL_DAYS);
     setResumePlayback(false);
     setMaxDurationMinutes('');
-    setEditing(null); setAudioId(''); setScheduleType('PRAYER_RELATIVE');
+    setRepeatCount('1');
+    setEditing(null); setSelectedAudioIds([]); setScheduleType('PRAYER_RELATIVE');
     setPrayerName('DHUHR'); setOffsetMinutes(-10); setFixedTime('07:30'); setVolume(80);
   };
   const edit = (schedule: AudioSchedule) => {
     setDaysOfWeek(schedule.daysOfWeek?.length ? schedule.daysOfWeek : ALL_DAYS);
-    setResumePlayback(!!schedule.resumePlayback);
+    setResumePlayback(!!schedule.resumePlayback && (schedule.audioIds?.length || 1) <= 1);
     setMaxDurationMinutes(schedule.maxDurationMinutes == null ? '' : String(schedule.maxDurationMinutes));
-    setEditing(schedule); setAudioId(schedule.audioId); setScheduleType(schedule.scheduleType);
+    setRepeatCount(String(schedule.repeatCount || 1));
+    setEditing(schedule); setSelectedAudioIds(schedule.audioIds?.length ? schedule.audioIds : [schedule.audioId]); setScheduleType(schedule.scheduleType);
     setPrayerName(schedule.prayerName || 'DHUHR'); setOffsetMinutes(schedule.offsetMinutes ?? -10);
     setFixedTime(schedule.fixedTime || '07:30'); setVolume(schedule.volume); setError(null); setMessage('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -79,17 +85,17 @@ export function AudioSchedulePage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!audioId) { setError('Pilih audio terlebih dahulu.'); return; }
+    if (!selectedAudioIds.length) { setError('Pilih minimal satu audio.'); return; }
     if (!daysOfWeek.length) { setError('Pilih minimal satu hari pengulangan.'); return; }
     setError(null);
     setMessage(''); setSaving(true);
     try {
       const payload = {
-        audioId, scheduleType, daysOfWeek, volume, resumePlayback, maxDurationMinutes: maxDurationMinutes === '' ? null : Number(maxDurationMinutes),
+        audioId: selectedAudioIds[0], audioIds: selectedAudioIds, scheduleType, daysOfWeek, volume, resumePlayback: selectedAudioIds.length > 1 ? false : resumePlayback, repeatCount: Number(repeatCount), maxDurationMinutes: maxDurationMinutes === '' ? null : Number(maxDurationMinutes),
         ...(scheduleType === 'PRAYER_RELATIVE' ? { prayerName, offsetMinutes } : { fixedTime }),
       };
-      if (editing) await api.patch(`/audio-schedules/${editing.id}`, payload);
-      else await api.post('/audio-schedules', payload);
+      if (editing) await api.patch(`${scheduleEndpoint}/${editing.id}`, payload);
+      else await api.post(scheduleEndpoint, payload);
       setMessage(editing ? 'Perubahan jadwal tersimpan.' : 'Jadwal berhasil ditambahkan.');
       reset();
       load();
@@ -100,14 +106,15 @@ export function AudioSchedulePage() {
     }
   };
 
-  const toggleActive = async (s: AudioSchedule) => { try { await api.patch(`/audio-schedules/${s.id}`, { isActive: !s.isActive }); load(); } catch(err) { setError((err as Error).message); } };
-  const remove = async (id: string) => { if (confirm('Hapus jadwal ini?')) { try { await api.delete(`/audio-schedules/${id}`); load(); } catch(err) { setError((err as Error).message); } } };
-  const shown = items.filter(s => (!filter || s.scheduleType === filter) && (s.audio?.name || audios.find(a=>a.id===s.audioId)?.name || '').toLowerCase().includes(query.toLowerCase()));
+  const toggleActive = async (s: AudioSchedule) => { try { await api.patch(`${scheduleEndpoint}/${s.id}`, { isActive: !s.isActive }); load(); } catch(err) { setError((err as Error).message); } };
+  const remove = async (id: string) => { if (confirm('Hapus jadwal ini?')) { try { await api.delete(`${scheduleEndpoint}/${id}`); load(); } catch(err) { setError((err as Error).message); } } };
+  const shown = items.filter(s => (!filter || s.scheduleType === filter) && (s.audioIds?.length ? s.audioIds.map(id => audios.find(a => a.id === id)?.name || id).join(' ') : s.audio?.name || audios.find(a=>a.id===s.audioId)?.name || '').toLowerCase().includes(query.toLowerCase()));
   const timezone = upcoming?.timezone || 'Asia/Jakarta';
 
   return (
     <div className="audio-schedule-page">
-      <header><div><small>♫ AUDIO</small><h1>Jadwal Audio</h1><p>Atur jadwal pemutaran audio secara otomatis sesuai waktu sholat dan kebutuhan masjid.</p></div><div className="schedule-date"><b>{new Date(clock).toLocaleDateString('id-ID',{timeZone:timezone,weekday:'long',day:'numeric',month:'long',year:'numeric'})}</b><small>{new Date(clock).toLocaleDateString('id-ID-u-ca-islamic',{timeZone:timezone,day:'numeric',month:'long',year:'numeric'})}</small></div><strong className="schedule-clock">{new Date(clock).toLocaleTimeString('id-ID',{timeZone:timezone,hourCycle:'h23'}).replaceAll('.',':')}</strong><div className="schedule-user"><b>{user?.name}</b><small>● Sesi aktif</small></div></header>
+      {publicMode && <BrowserPlayer />}
+      <header><div><small>♫ AUDIO</small><h1>Jadwal Audio</h1><p>Atur jadwal pemutaran audio secara otomatis sesuai waktu sholat dan kebutuhan masjid.</p></div><div className="schedule-date"><b>{new Date(clock).toLocaleDateString('id-ID',{timeZone:timezone,weekday:'long',day:'numeric',month:'long',year:'numeric'})}</b><small>{new Date(clock).toLocaleDateString('id-ID-u-ca-islamic',{timeZone:timezone,day:'numeric',month:'long',year:'numeric'})}</small></div><strong className="schedule-clock">{new Date(clock).toLocaleTimeString('id-ID',{timeZone:timezone,hourCycle:'h23'}).replaceAll('.',':')}</strong>{!publicMode && <div className="schedule-user"><b>{user?.name}</b><small>● Sesi aktif</small></div>}</header>
       {error && <div className="alert-error">{error}</div>}
       {message && <div className="alert-success" role="status">{message}</div>}
 
@@ -115,12 +122,19 @@ export function AudioSchedulePage() {
         <div className="schedule-heading"><span>♫</span><div><h2>{editing ? 'Edit Jadwal Audio' : 'Tambah Jadwal Audio'}</h2><p>Buat jadwal audio baru untuk diputar secara otomatis.</p></div></div>
         <div className="form-row">
           <div>
-            <label>Audio</label>
-            <Select value={audioId} onChange={(e) => setAudioId(e.target.value)} required>
-              <option value="">-- pilih audio --</option>
-              {editing && !audios.some(a => a.id === editing.audioId) && <option value={editing.audioId}>{editing.audio?.name || editing.audioId} (Nonaktif)</option>}
-              {audios.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </Select>
+                        <label htmlFor='schedule-audios'>Urutan audio</label>
+            <select id='schedule-audios' multiple size={Math.min(6, Math.max(3, audios.length))} value={selectedAudioIds} required onChange={e => {
+              const chosen = Array.from(e.currentTarget.selectedOptions).map(option => option.value);
+              setSelectedAudioIds(current => [...current.filter(id => chosen.includes(id)), ...chosen.filter(id => !current.includes(id))]);
+              if (chosen.length > 1) setResumePlayback(false);
+            }}>
+              {editing && (editing.audioIds?.length ? editing.audioIds : [editing.audioId]).filter(id => !audios.some(audio => audio.id === id)).map(id => <option key={id} value={id}>{audios.find(audio => audio.id === id)?.name || id} (Nonaktif)</option>)}
+              {audios.map(audio => <option key={audio.id} value={audio.id}>{audio.name}</option>)}
+            </select>
+            <div className='schedule-selection-order'>
+              {selectedAudioIds.map((id, index) => <div key={id}><span>{index + 1}. {audios.find(audio => audio.id === id)?.name || id}</span><button type='button' className='secondary' aria-label={'Naikkan urutan ' + (index + 1)} disabled={index === 0} onClick={() => setSelectedAudioIds(current => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })}>Naik</button><button type='button' className='secondary' aria-label={'Turunkan urutan ' + (index + 1)} disabled={index === selectedAudioIds.length - 1} onClick={() => setSelectedAudioIds(current => { const next = [...current]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })}>Turun</button></div>)}
+            </div>
+            <p className='hint'>Pilih beberapa file lalu atur urutannya. File akan diputar berurutan pada jam jadwal yang sama.</p>
           </div>
           <div>
             <label>Tipe Jadwal</label>
@@ -166,13 +180,18 @@ export function AudioSchedulePage() {
           <input id="max-duration" type="number" min={1} max={1440} step={1} placeholder="Sampai audio selesai" value={maxDurationMinutes} onChange={e => setMaxDurationMinutes(e.target.value)} />
           <p className="hint">Kosongkan untuk memutar sampai selesai. Contoh: isi 20 untuk menghentikan file 40 menit setelah diputar selama 20 menit. File asli tidak berubah.</p>
         </div>
+        <div style={{margin: '16px 0'}}>
+          <label htmlFor="repeat-count">Jumlah pemutaran</label>
+          <input id="repeat-count" type="number" min={1} max={100} step={1} value={repeatCount} onChange={e => setRepeatCount(e.target.value)} required />
+          <p className="hint">Jumlah total pemutaran berurutan. Contoh: 3 berarti audio diputar tiga kali, lalu jadwal dianggap selesai.</p>
+        </div>
         <label>Volume</label>
         <div className="schedule-volume"><span aria-hidden="true">♪</span><input aria-label="Volume audio" type="range" min={0} max={100} value={volume} onChange={(e) => setVolume(Number(e.target.value))} /><output>{volume}%</output></div>
         <div className="form-row"><div>
-          <label style={{display:'flex',alignItems:'center',gap:8}}><input style={{width:'auto'}} type="checkbox" checked={resumePlayback} onChange={e=>setResumePlayback(e.target.checked)}/>Lanjutkan dari posisi terakhir</label>
+          <label style={{display:'flex',alignItems:'center',gap:8}}><input style={{width:'auto'}} type='checkbox' disabled={selectedAudioIds.length > 1} checked={resumePlayback} onChange={e=>setResumePlayback(e.target.checked)}/>Lanjutkan dari posisi terakhir</label>
           <p className="hint">Saat batas durasi tercapai, jadwal berikutnya melanjutkan audio yang sama. Setelah audio selesai, jadwal berikutnya mulai dari awal. Mengganti audio atau mengubah opsi ini mereset posisi.</p>
         </div></div>
-        <p className="schedule-explanation">ⓘ Audio akan mulai diputar {scheduleType === 'FIXED_TIME' ? `pukul ${fixedTime} (${timezone})` : offsetMinutes === 0 ? `tepat pada waktu ${LABELS[prayerName]}` : `${Math.abs(offsetMinutes)} menit ${offsetMinutes < 0 ? 'sebelum' : 'setelah'} waktu ${LABELS[prayerName]}`} dengan volume {volume}%. {daysOfWeek.length ? daySummary(daysOfWeek) : 'Belum ada hari dipilih'}. {maxDurationMinutes ? `Berhenti otomatis setelah ${maxDurationMinutes} menit, atau lebih awal jika audio selesai.` : 'Diputar sampai audio selesai.'}</p>
+        <p className="schedule-explanation">ⓘ Audio akan mulai diputar {scheduleType === 'FIXED_TIME' ? `pukul ${fixedTime} (${timezone})` : offsetMinutes === 0 ? `tepat pada waktu ${LABELS[prayerName]}` : `${Math.abs(offsetMinutes)} menit ${offsetMinutes < 0 ? 'sebelum' : 'setelah'} waktu ${LABELS[prayerName]}`} dengan volume {volume}%. {daysOfWeek.length ? daySummary(daysOfWeek) : 'Belum ada hari dipilih'}. {maxDurationMinutes ? `Berhenti otomatis setelah ${maxDurationMinutes} menit, atau lebih awal jika audio selesai.` : 'Diputar sampai audio selesai.'} Urutan audio diputar {repeatCount} kali per jadwal.</p>
 
         <div className="form-actions"><button type="submit" disabled={saving}>{saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Tambah Jadwal'}</button>
           <button type="button" className="secondary" disabled={saving} onClick={() => { reset(); setError(null); }}>{editing ? 'Batal' : '↶ Reset'}</button>
@@ -184,11 +203,11 @@ export function AudioSchedulePage() {
       <p className="hint">Hitung mundur menuju jadwal voice berikutnya, mengikuti waktu server dan zona waktu mushola. Audio diputar oleh Audio Player; pemeriksaan jadwal dilakukan setiap 20 detik.</p>
 
       <div className="schedule-table-scroll"><table className="data-table">
-        <thead><tr><th>Audio</th><th>Waktu</th><th>Tipe Jadwal</th><th>Hitung Mundur</th><th>Volume</th><th>Batas Durasi</th><th>Status</th><th>Aksi</th></tr></thead>
+        <thead><tr><th>Audio</th><th>Waktu</th><th>Tipe Jadwal</th><th>Hitung Mundur</th><th>Volume</th><th>Batas Durasi</th><th>Pengulangan</th><th>Status</th><th>Aksi</th></tr></thead>
         <tbody>
           {shown.map((s) => (
             <tr key={s.id}>
-              <td>{s.audio?.name || audios.find((a) => a.id === s.audioId)?.name || s.audioId}</td>
+              <td>{(s.audioIds?.length ? s.audioIds : [s.audioId]).map(id => audios.find(a => a.id === id)?.name || (id === s.audioId ? s.audio?.name : null) || id).join(' → ')}</td>
               <td>{s.scheduleType === 'FIXED_TIME' ? s.fixedTime : `${LABELS[s.prayerName || ''] || s.prayerName} ${s.offsetMinutes! >= 0 ? '+' : ''}${s.offsetMinutes} menit`}<div className="hint">{daySummary(s.daysOfWeek)}</div></td>
               <td><span className="schedule-type">{s.scheduleType === 'FIXED_TIME' ? 'Jam Tetap' : 'Relatif Sholat'}</span></td>
               <td>{(() => {
@@ -204,11 +223,12 @@ export function AudioSchedulePage() {
               })()}</td>
               <td><div className="schedule-volume-cell"><meter min={0} max={100} value={s.volume} aria-label="Volume"/>{s.volume}%</div></td>
               <td>{s.maxDurationMinutes ? `${s.maxDurationMinutes} menit` : 'Sampai selesai'}{s.resumePlayback && <small style={{display:'block'}}>Lanjut dari {Math.floor((s.resumePositionSeconds||0)/3600).toString().padStart(2,'0')}:{Math.floor((s.resumePositionSeconds||0)%3600/60).toString().padStart(2,'0')}:{Math.floor((s.resumePositionSeconds||0)%60).toString().padStart(2,'0')}</small>}</td>
+              <td>{s.repeatCount || 1} kali</td>
               <td><button className="chip" onClick={() => toggleActive(s)}>{s.isActive ? 'Aktif' : 'Nonaktif'}</button></td>
               <td><div className="form-actions"><button className="secondary" disabled={saving} onClick={() => edit(s)}>Edit</button><button className="danger" disabled={saving || editing?.id === s.id} onClick={() => remove(s.id)}>Hapus</button></div></td>
             </tr>
           ))}
-          {shown.length === 0 && <tr><td colSpan={8}>{items.length ? 'Tidak ada jadwal yang sesuai pencarian.' : 'Belum ada jadwal audio.'}</td></tr>}
+          {shown.length === 0 && <tr><td colSpan={9}>{items.length ? 'Tidak ada jadwal yang sesuai pencarian.' : 'Belum ada jadwal audio.'}</td></tr>}
         </tbody>
       </table></div></section>
     </div>
