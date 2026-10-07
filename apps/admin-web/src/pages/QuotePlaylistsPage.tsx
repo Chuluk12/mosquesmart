@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { BrowserPlayer } from '../components/BrowserPlayer';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import './quote-playlists.css';
 import { Select } from '../components/Select';
 
 type Audio = { id: string; name: string; description?: string | null; isActive?: boolean };
+type Player = { deviceId: string; name: string; online: boolean };
 type Settings = { name: string; times: string[]; daysOfWeek: number[]; volume: number; isActive: boolean };
 type Playlist = Settings & {
   id: string; updatedAt: string; cycle: number; audioIds: string[]; audios: Audio[];
@@ -34,12 +36,14 @@ function QuoteIcon({ name, tone = 'blue' }: { name: string; tone?: string }) {
 function SectionTitle({ icon, title, description, tone }: { icon: string; title: string; description?: string; tone?: string }) {
   return <div className="quote-section-title"><QuoteIcon name={icon} tone={tone}/><div><h2>{title}</h2>{description && <p>{description}</p>}</div></div>;
 }
-export function QuotePlaylistsPage() {
+export function QuotePlaylistsPage({ publicMode = false }: { publicMode?: boolean }) {
   const { user } = useAuth();
   const canEdit = ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'].includes(user?.role || '');
   const canApprove = ['SUPER_ADMIN', 'ADMIN'].includes(user?.role || '');
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [audios, setAudios] = useState<Audio[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [form, setForm] = useState<Settings>(defaults);
   const [selected, setSelected] = useState<string[]>([]);
   const [deleteAudioId, setDeleteAudioId] = useState<string | null>(null);
@@ -58,15 +62,20 @@ export function QuotePlaylistsPage() {
   const [voiceTitle, setVoiceTitle] = useState('');
   const [voiceText, setVoiceText] = useState('');
   async function load() {
-    const [p, a] = await Promise.all([api.get<Playlist[]>('/quote-playlists'), api.get<Audio[]>('/audio?activeOnly=true')]);
-    setPlaylists(p); setAudios(a);
+    const p = await api.get<Playlist[]>(publicMode && !canEdit ? '/public/quote-playlists' : '/quote-playlists');
+    setPlaylists(p);
+    if (canEdit) {
+      const [audioList, playerList] = await Promise.all([api.get<Audio[]>('/audio'), api.get<Player[]>('/players')]);
+      setAudios(audioList); setPlayers(playerList);
+      setSelectedPlayerId(current => playerList.some(p => p.deviceId === current && p.online) ? current : playerList.find(p => p.online)?.deviceId || '');
+    }
   }
   useEffect(() => {
     let alive = true;
     const refresh = () => { if (alive) load().catch(e => { if (alive) setError(e.message); }); };
     refresh(); const timer = window.setInterval(refresh, 20000);
     return () => { alive = false; window.clearInterval(timer); };
-  }, []);
+  }, [publicMode, canEdit]);
   async function action(work: () => Promise<unknown>, success: string) {
     setBusy(true); setError(''); setMessage('');
     try { await work(); await load(); setMessage(success); }
@@ -116,6 +125,8 @@ export function QuotePlaylistsPage() {
   return <div className="quote-page">
     <header><span className="hint">AUDIO</span><h1>Playlist Quotes</h1>
       <p>Putar satu audio quotes secara acak pada setiap jadwal, tanpa pengulangan dalam satu putaran.</p></header>
+    {publicMode && <BrowserPlayer />}
+    {publicMode && !canEdit && <p className="hint"><a href="/login">Masuk sebagai admin</a> untuk mengaktifkan playlist atau menjalankan audio.</p>}
     {error && <p className="alert-error" role="alert">{error}</p>}
     {message && <p className="alert-success" role="status">{message}</p>}
 
@@ -146,7 +157,8 @@ export function QuotePlaylistsPage() {
           <label className="quote-upload">Upload beberapa audio<input type="file" multiple accept=".mp3,.wav" onChange={e => { void upload(e.target.files); e.target.value = ''; }}/></label>
           <div className="quote-section-bar"><input aria-label="Cari audio quotes" placeholder="Cari audio..." value={search} onChange={e => setSearch(e.target.value)}/>
             <div className="quote-actions"><button type="button" className="secondary" onClick={() => setSelected(prev => [...new Set([...prev, ...visible.map(a => a.id)])])}>Pilih semua hasil</button><button type="button" className="secondary" onClick={() => setSelected([])}>Kosongkan</button><span>{selected.length} dipilih</span></div></div>
-          <div className="quote-audios">{visible.map(a => <div className="quote-audio-choice" key={a.id}><label><input type="checkbox" checked={selected.includes(a.id)} onChange={e => setSelected(prev => e.target.checked ? [...prev, a.id] : prev.filter(id => id !== a.id))}/>{a.name}</label>
+          <div className="quote-audios">{visible.map(a => <div className="quote-audio-choice" key={a.id}><label><input type="checkbox" disabled={a.isActive === false} checked={selected.includes(a.id)} onChange={e => setSelected(prev => e.target.checked ? [...prev, a.id] : prev.filter(id => id !== a.id))}/>{a.name}{a.isActive === false && <small>Nonaktif</small>}</label>
+            {canEdit && <button type="button" className="secondary" disabled={busy} onClick={() => action(async () => { await api.patch('/audio/' + a.id, { isActive: !a.isActive }); if (a.isActive) setSelected(prev => prev.filter(id => id !== a.id)); }, a.isActive ? 'Audio dinonaktifkan.' : 'Audio diaktifkan.')}>{a.isActive ? 'Nonaktifkan audio' : 'Aktifkan audio'}</button>}
             {canApprove && <button type="button" className="quote-audio-delete" disabled={busy} onClick={() => setDeleteAudioId(a.id)}>Hapus</button>}
             {deleteAudioId === a.id && <div className="quote-confirm quote-audio-confirm"><p>Hapus file <strong>{a.name}</strong> permanen dari Audio Library? Audio yang masih dipakai jadwal atau playlist akan ditolak.</p><div className="quote-actions"><button type="button" className="quote-danger-button" disabled={busy} onClick={() => action(async () => { await api.delete('/audio/' + a.id); setSelected(prev => prev.filter(id => id !== a.id)); setDeleteAudioId(null); }, 'Audio dihapus dari Audio Library.')}>Ya, hapus file</button><button type="button" className="secondary" onClick={() => setDeleteAudioId(null)}>Batal</button></div></div>}</div>)}
             {!visible.length && <p>Tidak ada audio yang cocok. Unggah audio atau ubah pencarian.</p>}</div>
@@ -170,33 +182,34 @@ export function QuotePlaylistsPage() {
         <p>Hapus playlist <strong>{p.name}</strong> beserta riwayat dan persetujuan ulangnya? File voice tetap tersimpan di Audio Library.</p>
         <div className="quote-actions"><button type="button" className="quote-danger-button" disabled={busy} onClick={() => action(async () => { await api.delete('/quote-playlists/' + p.id); setDeletePlaylistId(null); if (editing === p.id) reset(); }, 'Playlist dihapus.')}>Ya, hapus playlist</button><button type="button" className="secondary" onClick={() => setDeletePlaylistId(null)}>Batal</button></div>
       </div>}
-      <div className="quote-stats">
+      {!publicMode && <div className="quote-stats">
         {[{ value: p.audioIds.length, label: 'Total audio', icon: 'audio', tone: 'blue' }, { value: p.remaining, label: 'Tersedia', icon: 'stock', tone: 'orange' }, { value: p.usedCount, label: 'Terpakai / dicadangkan', icon: 'play', tone: 'green' }, { value: p.pending, label: 'Menunggu / diputar', icon: 'clock', tone: 'purple' }].map(stat => <div className={'quote-stat ' + stat.tone} key={stat.label}><QuoteIcon name={stat.icon} tone={stat.tone}/><div><strong>{stat.value}</strong><span>{stat.label}</span></div></div>)}
-      </div>
+      </div>}
       <details className="quote-voice-list"><summary>Daftar Voice ({p.audios.length})</summary>
+        {canEdit && <div className="quote-actions"><label htmlFor={'quote-player-' + p.id}>Speaker tujuan</label><Select id={'quote-player-' + p.id} value={selectedPlayerId} onChange={e => setSelectedPlayerId(e.target.value)}><option value="">Pilih player online</option>{players.filter(player => player.online).map(player => <option key={player.deviceId} value={player.deviceId}>{player.name}</option>)}</Select>{!players.some(player => player.online) && <small>Belum ada player online.</small>}</div>}
         <div className="quote-voice-items">{p.audios.map(a => <div className="quote-voice-item" key={a.id}>
-          {editingVoiceId === p.id + '|' + a.id ? <div className="quote-voice-edit"><label>Judul voice<input maxLength={150} value={voiceTitle} onChange={e => setVoiceTitle(e.target.value)}/></label><label>Teks quotes / deskripsi<textarea rows={3} value={voiceText} onChange={e => setVoiceText(e.target.value)}/></label><small>Mengubah teks di sini tidak mengubah suara pada file rekaman.</small><div className="quote-actions"><button type="button" disabled={busy || !voiceTitle.trim()} onClick={() => void saveVoice(a.id)}>Simpan</button><button type="button" className="secondary" onClick={() => setEditingVoiceId(null)}>Batal</button></div></div> : <><div className="quote-voice-text"><strong>{a.name}</strong>{a.description && <p>{a.description}</p>}{a.isActive === false && <small>Nonaktif di Audio Library</small>}</div>{canEdit && <div className="quote-actions"><button type="button" className="secondary" disabled={busy} onClick={() => startVoiceEdit(p.id, a)}>Edit judul / teks</button><button type="button" className="quote-danger-button" disabled={busy} onClick={() => { setRemoveVoiceId(p.id + '|' + a.id); setEditingVoiceId(null); }}>Hapus dari playlist</button></div>}</>}
+          {editingVoiceId === p.id + '|' + a.id ? <div className="quote-voice-edit"><label>Judul voice<input maxLength={150} value={voiceTitle} onChange={e => setVoiceTitle(e.target.value)}/></label><label>Teks quotes / deskripsi<textarea rows={3} value={voiceText} onChange={e => setVoiceText(e.target.value)}/></label><small>Mengubah teks di sini tidak mengubah suara pada file rekaman.</small><div className="quote-actions"><button type="button" disabled={busy || !voiceTitle.trim()} onClick={() => void saveVoice(a.id)}>Simpan</button><button type="button" className="secondary" onClick={() => setEditingVoiceId(null)}>Batal</button></div></div> : <><div className="quote-voice-text"><strong>{a.name}</strong>{a.description && <p>{a.description}</p>}{a.isActive === false && <small>Nonaktif di Audio Library</small>}</div>{canEdit && <div className="quote-actions"><button type="button" className="secondary" disabled={busy} onClick={() => action(() => api.patch('/audio/' + a.id, { isActive: !a.isActive }), a.isActive === false ? 'Audio diaktifkan.' : 'Audio dinonaktifkan.')}>{a.isActive === false ? 'Aktifkan audio' : 'Nonaktifkan audio'}</button><button type="button" disabled={busy || !selectedPlayerId || a.isActive === false} onClick={() => action(() => api.post('/players/' + encodeURIComponent(selectedPlayerId) + '/play', { audioId: a.id, volume: p.volume }), 'Perintah memutar ' + a.name + ' dikirim ke player.')}>Putar di Player</button><button type="button" className="secondary" disabled={busy} onClick={() => startVoiceEdit(p.id, a)}>Edit judul / teks</button><button type="button" className="quote-danger-button" disabled={busy} onClick={() => { setRemoveVoiceId(p.id + '|' + a.id); setEditingVoiceId(null); }}>Hapus dari playlist</button></div>}</>}
           {removeVoiceId === p.id + '|' + a.id && <div className="quote-confirm quote-voice-confirm"><p>Keluarkan <strong>{a.name}</strong> dari playlist {p.name}? File tetap ada di Audio Library.</p><div className="quote-actions"><button type="button" className="quote-danger-button" disabled={busy || p.audioIds.length <= 1} onClick={() => action(async () => { await api.patch('/quote-playlists/' + p.id + '/audios', { audioIds: p.audioIds.filter(id => id !== a.id) }); setRemoveVoiceId(null); }, 'Voice dikeluarkan dari playlist.')}>Ya, keluarkan</button><button type="button" className="secondary" onClick={() => setRemoveVoiceId(null)}>Batal</button></div>{p.audioIds.length <= 1 && <small>Playlist harus memiliki minimal satu voice. Hapus playlist jika sudah tidak digunakan.</small>}</div>}
         </div>)}</div>
       </details>
       <div className="quote-schedule-strip"><SectionTitle icon="calendar" title="Jadwal Pemutaran" description={p.daysOfWeek.map(d => DAYS[d]).join(', ')}/>
         <div className="quote-time-tags">{p.times.map(t => <span key={t}>{t}</span>)}</div>
         <div className="quote-volume-readout"><span>Volume <strong>{p.volume}%</strong></span><meter aria-label="Volume playlist" min={0} max={100} value={p.volume}/><small>{p.timezone}</small></div>
-      </div>      {p.remaining === 0 && <p className="quote-note">{p.pending ? 'Menunggu hasil pemutaran terakhir sebelum persetujuan ulang.' : 'Stok habis. Tidak ada audio yang diulang sampai admin menyetujui putaran baru.'}</p>}
-      {p.pending > 0 && <p className="hint">Jika koneksi player terputus sebelum memberi hasil, audio tetap dikunci untuk mencegah pengulangan. Periksa History dan sambungkan kembali player.</p>}
+      </div>      {!publicMode && p.remaining === 0 && <p className="quote-note">{p.pending ? 'Menunggu hasil pemutaran terakhir sebelum persetujuan ulang.' : 'Stok habis. Tidak ada audio yang diulang sampai admin menyetujui putaran baru.'}</p>}
+      {!publicMode && p.pending > 0 && <p className="hint">Jika koneksi player terputus sebelum memberi hasil, audio tetap dikunci untuk mencegah pengulangan. Periksa History dan sambungkan kembali player.</p>}
       {approval?.id === p.id && <div className="quote-note" role="region" aria-label="Konfirmasi pengulangan">
         <p>Izinkan seluruh audio aktif pada <strong>{p.name}</strong> diputar kembali secara acak pada jadwal berikutnya? Persetujuan ini dicatat atas akun Anda.</p>
         <div className="quote-actions"><button type="button" disabled={busy} onClick={() => action(async () => { await api.post('/quote-playlists/' + p.id + '/approve-repeat', { cycle: approval.cycle }); setApproval(null); }, 'Putaran baru disetujui. Audio akan diputar pada jadwal berikutnya.')}>Ya, setujui putaran baru</button><button type="button" className="secondary" onClick={() => setApproval(null)}>Batal</button></div>
       </div>}
-      <details className="quote-history" open><summary>Riwayat Playlist ({p.recentRuns.length} terbaru)</summary>        <div className="quote-history-filters"><input aria-label={'Cari riwayat ' + p.name} placeholder="Cari audio..." value={historySearch[p.id] || ''} onChange={e => setHistorySearch({ ...historySearch, [p.id]: e.target.value })}/>
+      {!publicMode && <details className="quote-history" open><summary>Riwayat Playlist ({p.recentRuns.length} terbaru)</summary>        <div className="quote-history-filters"><input aria-label={'Cari riwayat ' + p.name} placeholder="Cari audio..." value={historySearch[p.id] || ''} onChange={e => setHistorySearch({ ...historySearch, [p.id]: e.target.value })}/>
           <Select aria-label={'Filter status ' + p.name} value={historyStatus[p.id] || ''} onChange={e => setHistoryStatus({ ...historyStatus, [p.id]: e.target.value })}><option value="">Semua Status</option>{Object.entries(statusText).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></div>
         <div className="quote-table"><table><thead><tr><th>No</th><th>Jadwal</th><th>Audio</th><th>Putaran</th><th>Status</th></tr></thead><tbody>
           {p.recentRuns.filter(r => r.audioName.toLowerCase().includes((historySearch[p.id] || '').toLowerCase()) && (!historyStatus[p.id] || r.status === historyStatus[p.id])).map((r, index) => <tr key={r.id}><td>{index + 1}</td><td>{r.slot}</td><td><span className="quote-history-audio"><QuoteIcon name="play"/>{r.audioName}</span></td><td>{r.cycle}</td><td><span className={"quote-badge " + r.status}>{statusText[r.status] || r.status}</span>{r.audioId === null ? ' — stok dikembalikan' : ''}{canApprove && ['LOADING', 'PLAYING'].includes(r.status) && <div>
           {resolveId === r.id ? <><p>Pastikan perangkat sudah berhenti. Audio tetap dianggap terpakai. Tindakan hanya tersedia saat player offline.</p><button type="button" disabled={busy} onClick={() => action(async () => { await api.post('/quote-playlists/' + p.id + '/runs/' + r.id + '/resolve'); setResolveId(null); }, 'Pemutaran terputus ditutup; audio tetap terkunci sampai persetujuan ulang.')}>Konfirmasi terpakai</button><button type="button" className="secondary" onClick={() => setResolveId(null)}>Batal</button></> : <button type="button" className="secondary" onClick={() => setResolveId(r.id)}>Tangani koneksi terputus</button>}
         </div>}</td></tr>)}
         </tbody></table></div>{!p.recentRuns.length && <p>Belum ada pemutaran.</p>}
-      </details>
-      {p.approvals.length > 0 && <details><summary>Riwayat persetujuan ulang</summary>{p.approvals.map(a => <p key={a.id}>Putaran {a.cycle} · {new Date(a.approvedAt).toLocaleString('id-ID', { timeZone: p.timezone })} · ID admin: {a.approvedBy}</p>)}</details>}
+      </details>}
+      {!publicMode && p.approvals.length > 0 && <details><summary>Riwayat persetujuan ulang</summary>{p.approvals.map(a => <p key={a.id}>Putaran {a.cycle} · {new Date(a.approvedAt).toLocaleString('id-ID', { timeZone: p.timezone })} · ID admin: {a.approvedBy}</p>)}</details>}
     </section>)}
   </div>;
 }

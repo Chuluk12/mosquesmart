@@ -26,6 +26,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/audio-schedule-public" element={<AudioSchedulePage publicMode />} />
+          <Route path="/quote-playlists-public" element={<QuotePlaylistsPage publicMode />} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/change-password" element={<ChangePasswordPage />} />

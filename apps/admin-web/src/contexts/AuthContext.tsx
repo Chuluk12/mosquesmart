@@ -19,6 +19,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const clearExpiredSession = () => setUser(null);
+    window.addEventListener('auth:expired', clearExpiredSession);
+    return () => window.removeEventListener('auth:expired', clearExpiredSession);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     if (location.pathname === '/audio-schedule-public') {
       setUser(null);

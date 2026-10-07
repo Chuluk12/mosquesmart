@@ -34,6 +34,41 @@ export class QuotePlaylistService {
     }));
   }
 
+  async listPublic() {
+    const mosque = await this.mosque.getOrCreate();
+    const playlists = await this.prisma.quotePlaylist.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return Promise.all(playlists.map(async p => {
+      const audios = await this.prisma.audio.findMany({
+        where: { id: { in: p.audioIds }, mosqueId: mosque.id, isActive: true },
+        select: { id: true, name: true, description: true, isActive: true },
+      });
+      return {
+        id: p.id, name: p.name, times: p.times, daysOfWeek: p.daysOfWeek,
+        volume: p.volume, isActive: p.isActive, updatedAt: p.updatedAt,
+        timezone: mosque.timezone, cycle: 0, audioIds: audios.map(a => a.id),
+        audios, remaining: 0, usedCount: 0, pending: 0, approvals: [], recentRuns: [],
+      };
+    }));
+  }
+
+  async listPublicAudios() {
+    const mosque = await this.mosque.getOrCreate();
+    const playlists = await this.prisma.quotePlaylist.findMany({
+      where: { isActive: true },
+      select: { audioIds: true },
+    });
+    const audioIds = [...new Set(playlists.flatMap(playlist => playlist.audioIds))];
+    if (!audioIds.length) return [];
+    return this.prisma.audio.findMany({
+      where: { id: { in: audioIds }, mosqueId: mosque.id, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async create(dto: CreatePlaylistDto) {
     const mosque = await this.mosque.getOrCreate();
     const count = await this.prisma.audio.count({ where: { id: { in: dto.audioIds }, isActive: true, mosqueId: mosque.id } });

@@ -8,7 +8,7 @@ interface PublicAudio { id: string; name: string }
 
 export function BrowserPlayer(){
  const location=useLocation();
- const publicMode=location.pathname==='/audio-schedule-public';
+ const publicMode=location.pathname==='/audio-schedule-public'||location.pathname==='/quote-playlists-public';
  const [state,setState]=useState('Belum aktif'),[enabled,setEnabled]=useState(false),[error,setError]=useState(''),[audios,setAudios]=useState<PublicAudio[]>([]),[testAudioId,setTestAudioId]=useState('');
  const audio=useRef<HTMLAudioElement>(null),socket=useRef<Socket|null>(null),history=useRef<string|null>(null),limit=useRef<number|null>(null),generation=useRef(0),activating=useRef(false),startPosition=useRef(0),repeatRemaining=useRef(1),repeatTotal=useRef(1),repeatElapsed=useRef(0),sequenceRef=useRef<{historyId:string;audioId:string}[]>([]),sequenceIndex=useRef(0);
  const [deviceId]=useState(()=>`browser-${crypto.randomUUID()}`);
@@ -68,7 +68,7 @@ export function BrowserPlayer(){
   }catch(e){setError('Izin audio belum aktif: '+(e as Error).message);}finally{activating.current=false;}
  }
  useEffect(()=>{
-  if(publicMode)api.get<PublicAudio[]>('/public/audio-schedules/audios').then(rows=>{setAudios(rows);setTestAudioId(rows[0]?.id||'');}).catch(e=>setError((e as Error).message));
+  if(publicMode){const endpoint=location.pathname==='/quote-playlists-public'?'/public/quote-playlists/audios':'/public/audio-schedules/audios';api.get<PublicAudio[]>(endpoint).then(rows=>{setAudios(rows);setTestAudioId(rows[0]?.id||'');}).catch(e=>setError((e as Error).message));}
   const timer=setInterval(()=>{if(socket.current?.connected){socket.current.emit('player:heartbeat',{deviceId});if(history.current&&audio.current)socket.current.emit('player:progress',{deviceId,historyId:history.current,positionSeconds:audio.current.currentTime});}},10000);
   const budget=setInterval(()=>{if(history.current&&limit.current&&audio.current&&repeatElapsed.current+Math.max(0,audio.current.currentTime-startPosition.current)>=limit.current){stop();setState('Online - batas durasi tercapai');}},250);
   return()=>{clearInterval(timer);clearInterval(budget);stop();socket.current?.disconnect();};

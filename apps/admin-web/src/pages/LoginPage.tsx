@@ -64,6 +64,7 @@ export function LoginPage() {
         <div className="login-divider"><span>atau</span></div>
         <a className="login-display-link" href={(import.meta as any).env?.VITE_DISPLAY_URL || `${window.location.protocol}//${window.location.hostname}:5174`} target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="1"/><path d="M12 17v4m-5 0h10"/></svg>Buka Tampilan Display<span aria-hidden="true">›</span></a>
         <a className="login-display-link" href="/audio-schedule-public">Buka Jadwal Audio</a>
+        <a className="login-display-link" href="/quote-playlists-public">Buka Playlist Quotes</a>
       </form>
       </main>
       <footer className="login-page-footer"><span>⌖ {[mosque?.city, mosque?.province].filter(Boolean).join(', ') || 'Lokasi mushola'}</span><span>{now.toLocaleDateString('id-ID', { timeZone: mosque?.timezone || 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span><span>{now.toLocaleDateString('id-ID-u-ca-islamic', { timeZone: mosque?.timezone || 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric' })}</span><span>Mosque System</span></footer>
