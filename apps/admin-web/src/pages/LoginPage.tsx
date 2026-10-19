@@ -27,6 +27,9 @@ export function LoginPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const fullscreenRequest = !document.fullscreenElement && document.documentElement.requestFullscreen
+      ? document.documentElement.requestFullscreen().then(() => true).catch(() => false)
+      : Promise.resolve(false);
     setError(null);
     setSubmitting(true);
     try {
@@ -35,6 +38,9 @@ export function LoginPage() {
       else localStorage.removeItem('rememberedUsername');
       navigate('/');
     } catch (err) {
+      if (await fullscreenRequest && document.fullscreenElement) {
+        await document.exitFullscreen().catch(() => undefined);
+      }
       setError(err instanceof ApiError ? err.message : 'Login gagal');
     } finally {
       setSubmitting(false);

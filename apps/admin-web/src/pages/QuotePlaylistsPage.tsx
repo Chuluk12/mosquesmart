@@ -38,8 +38,8 @@ function SectionTitle({ icon, title, description, tone }: { icon: string; title:
 }
 export function QuotePlaylistsPage({ publicMode = false }: { publicMode?: boolean }) {
   const { user } = useAuth();
-  const canEdit = ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'].includes(user?.role || '');
-  const canApprove = ['SUPER_ADMIN', 'ADMIN'].includes(user?.role || '');
+  const canEdit = !publicMode && ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'].includes(user?.role || '');
+  const canApprove = !publicMode && ['SUPER_ADMIN', 'ADMIN'].includes(user?.role || '');
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [audios, setAudios] = useState<Audio[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -62,7 +62,7 @@ export function QuotePlaylistsPage({ publicMode = false }: { publicMode?: boolea
   const [voiceTitle, setVoiceTitle] = useState('');
   const [voiceText, setVoiceText] = useState('');
   async function load() {
-    const p = await api.get<Playlist[]>(publicMode && !canEdit ? '/public/quote-playlists' : '/quote-playlists');
+    const p = await api.get<Playlist[]>(publicMode ? '/public/quote-playlists' : '/quote-playlists');
     setPlaylists(p);
     if (canEdit) {
       const [audioList, playerList] = await Promise.all([api.get<Audio[]>('/audio'), api.get<Player[]>('/players')]);
@@ -126,7 +126,7 @@ export function QuotePlaylistsPage({ publicMode = false }: { publicMode?: boolea
     <header><span className="hint">AUDIO</span><h1>Playlist Quotes</h1>
       <p>Putar satu audio quotes secara acak pada setiap jadwal, tanpa pengulangan dalam satu putaran.</p></header>
     {publicMode && <BrowserPlayer />}
-    {publicMode && !canEdit && <p className="hint"><a href="/login">Masuk sebagai admin</a> untuk mengaktifkan playlist atau menjalankan audio.</p>}
+    {publicMode && !canEdit && <p className="hint"><a href="/login">Masuk sebagai admin</a> untuk mengelola playlist dan menyetujui putar ulang.</p>}
     {error && <p className="alert-error" role="alert">{error}</p>}
     {message && <p className="alert-success" role="status">{message}</p>}
 
@@ -170,7 +170,7 @@ export function QuotePlaylistsPage({ publicMode = false }: { publicMode?: boolea
     {!playlists.length && <p className="quote-panel">Belum ada playlist quotes.</p>}
     {playlists.map(p => <section className="quote-panel" key={p.id}>
       <div className="quote-playlist-heading">
-        <div className="quote-section-title"><QuoteIcon name="audio"/><div><div className="quote-actions"><h2>{p.name}</h2><span className={'quote-badge ' + (p.isActive ? 'FINISHED' : 'STOPPED')}>{p.isActive ? 'Aktif' : 'Nonaktif'}</span></div><p>Putaran {p.cycle}{p.updatedAt && <> · Terakhir diperbarui {new Date(p.updatedAt).toLocaleString('id-ID', { timeZone: p.timezone })}</>}</p></div></div>
+        <div className="quote-section-title"><QuoteIcon name="audio"/><div><div className="quote-actions"><h2>{p.name}</h2><span className={'quote-badge ' + (p.isActive ? 'FINISHED' : 'STOPPED')}>{p.isActive ? 'Aktif' : 'Nonaktif'}</span></div><p>{!publicMode && <>Putaran {p.cycle}</>}{p.updatedAt && <>{!publicMode && " · "}Terakhir diperbarui {new Date(p.updatedAt).toLocaleString('id-ID', { timeZone: p.timezone })}</>}</p></div></div>
         <div className="quote-actions">
           {canEdit && <button type="button" className="secondary" disabled={busy} onClick={() => { setEditing(p.id); setForm({ name: p.name, times: [...p.times], daysOfWeek: [...p.daysOfWeek], volume: p.volume, isActive: p.isActive }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Edit Playlist</button>}
           {canEdit && <button type="button" className="secondary" disabled={busy} onClick={() => action(() => api.patch('/quote-playlists/' + p.id, { name: p.name, times: p.times, daysOfWeek: p.daysOfWeek, volume: p.volume, isActive: !p.isActive }), 'Status playlist diperbarui.')}>{p.isActive ? 'Nonaktifkan' : 'Aktifkan'}</button>}

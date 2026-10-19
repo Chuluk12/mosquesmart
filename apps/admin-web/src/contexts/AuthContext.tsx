@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    if (location.pathname === '/audio-schedule-public') {
+    if (location.pathname === '/audio-schedule-public' || location.pathname === '/quote-playlists-public') {
       setUser(null);
       setLoading(false);
       return () => { active = false; };
@@ -57,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     finally {
       setToken(null);
       setUser(null);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     }
   };
 
