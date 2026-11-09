@@ -10,6 +10,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: mosquesmart-production
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAMESPACE: ghcr.io/chuluk12/mosquesmart
@@ -18,6 +22,8 @@ jobs:
   build-and-push:
     name: Build and push images
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
 
@@ -28,7 +34,7 @@ jobs:
       - name: Verify build files
         shell: bash
         run: |
-          set -eu
+          set -Eeuo pipefail
           test -f Dockerfile
           test -f nginx-spa.conf
           test -f package-lock.json
@@ -36,7 +42,8 @@ jobs:
       - name: Set image metadata
         id: meta
         shell: bash
-        run: echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -92,9 +99,21 @@ jobs:
     name: Deploy on VPS
     needs: build-and-push
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     environment: production
 
     steps:
+      - name: Install OpenVPN
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y openvpn
+
+          echo "OpenVPN version:"
+          openvpn --version | head -n 2
+
       - name: Connect to OpenVPN
         shell: bash
         env:
@@ -106,10 +125,18 @@ jobs:
           CONFIG_FILE="$RUNNER_TEMP/openvpn-client.ovpn"
           PID_FILE="$RUNNER_TEMP/openvpn.pid"
 
+          if [ -z "$OPENVPN_CONFIG" ]; then
+            echo "ERROR: OPENVPN_CONFIG secret is empty"
+            exit 1
+          fi
+
           printf '%s' "$OPENVPN_CONFIG" > "$CONFIG_FILE"
           chmod 600 "$CONFIG_FILE"
 
           sudo touch "$LOG_FILE" "$PID_FILE"
+          sudo chmod 600 "$LOG_FILE" "$PID_FILE"
+
+          echo "Starting OpenVPN..."
 
           sudo openvpn \
             --config "$CONFIG_FILE" \
@@ -120,29 +147,63 @@ jobs:
           connected=false
 
           for attempt in {1..60}; do
-            if grep -q "Initialization Sequence Completed" "$LOG_FILE"; then
+
+            if sudo grep -q "Initialization Sequence Completed" "$LOG_FILE"; then
               connected=true
               break
             fi
 
-            if ! sudo kill -0 "$(sudo cat "$PID_FILE")" 2>/dev/null; then
-              echo "OpenVPN process stopped!"
+            if ! sudo test -s "$PID_FILE"; then
+              echo "Waiting for OpenVPN PID..."
+              sleep 2
+              continue
+            fi
+
+            VPN_PID=$(sudo cat "$PID_FILE")
+
+            if ! sudo kill -0 "$VPN_PID" 2>/dev/null; then
+              echo "ERROR: OpenVPN process stopped!"
               sudo cat "$LOG_FILE"
               exit 1
             fi
 
+            echo "Waiting for VPN connection ($attempt/60)..."
             sleep 2
           done
 
           if [ "$connected" != true ]; then
-            echo "OpenVPN connection timeout!"
+            echo "ERROR: OpenVPN connection timeout!"
             sudo cat "$LOG_FILE"
             exit 1
           fi
 
           echo "OpenVPN connected successfully!"
+
+          echo "VPN interface:"
           ip addr show tun0
+
+          echo "Routing table:"
           ip route
+
+          echo "Testing VPN connectivity..."
+
+      - name: Test VPS SSH reachability
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          set -Eeuo pipefail
+
+          if [ -z "$VPS_HOST" ]; then
+            echo "ERROR: VPS_HOST is empty"
+            exit 1
+          fi
+
+          echo "Testing VPS: $VPS_HOST"
+
+          if ! ping -c 3 -W 5 "$VPS_HOST"; then
+            echo "WARNING: Ping failed. ICMP may be blocked."
+          fi
 
       - name: Deploy through SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -150,34 +211,94 @@ jobs:
           IMAGE_NAMESPACE: ${{ env.IMAGE_NAMESPACE }}
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
           GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ github.token }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          timeout: 60s
           command_timeout: 40m
           envs: IMAGE_NAMESPACE,IMAGE_TAG,GHCR_USERNAME,GHCR_TOKEN
           script_stop: true
+
           script: |
-            set -eu
+            set -Eeuo pipefail
+
             cd "$HOME/serverweb/services/mosquesmart"
+
             test -f .env
-            trap 'status=$?; echo "Deployment failed with exit code $status"; docker compose --env-file .env ps -a; docker compose --env-file .env logs --tail=100 api admin-web display-web || true; exit "$status"' ERR
+
+            trap '
+              status=$?
+              echo "Deployment failed with exit code $status"
+              docker compose --env-file .env ps -a
+              docker compose --env-file .env logs --tail=100 api admin-web display-web || true
+              exit "$status"
+            ' ERR
+
+            echo "Fetching latest source..."
             git fetch origin main
             git reset --hard origin/main
-            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin
+
+            echo "Logging in to GHCR..."
+            printf '%s' "$GHCR_TOKEN" | \
+              docker login ghcr.io \
+              --username "$GHCR_USERNAME" \
+              --password-stdin
+
             export IMAGE_REGISTRY="$IMAGE_NAMESPACE"
             export IMAGE_TAG="$IMAGE_TAG"
+
+            echo "Pulling Docker images..."
             docker compose --env-file .env pull
-            echo "Running Prisma migrations with image $IMAGE_REGISTRY/api:$IMAGE_TAG"
+
+            echo "Running Prisma migrations..."
+
             if docker compose --env-file .env run --rm api npm run prisma:deploy -w apps/api; then
               echo "Prisma migration completed successfully."
             else
               migration_status=$?
-              echo "WARNING: Prisma migration failed with exit code $migration_status. Continuing deployment; run migration manually after checking the output above."
+              echo "WARNING: Prisma migration failed with exit code $migration_status."
+              echo "Continuing deployment. Check migration output manually."
             fi
-            docker compose --env-file .env up -d --no-build --remove-orphans --timeout 60
+
+            echo "Starting containers..."
+
+            docker compose \
+              --env-file .env \
+              up -d \
+              --no-build \
+              --remove-orphans \
+              --timeout 60
+
+            echo "Container status:"
             docker compose --env-file .env ps -a
+
+            echo "Cleaning unused Docker images..."
             docker image prune -f
+
             docker logout ghcr.io
+
+            echo "Deployment completed successfully."
+
+      - name: Upload OpenVPN logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mosquesmart-openvpn-logs
+          path: ${{ runner.temp }}/openvpn.log
+          if-no-files-found: warn
+
+      - name: Stop OpenVPN
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/openvpn.pid" ]; then
+            VPN_PID=$(sudo cat "$RUNNER_TEMP/openvpn.pid" 2>/dev/null || true)
+
+            if [ -n "$VPN_PID" ]; then
+              sudo kill "$VPN_PID" 2>/dev/null || true
+            fi
+          fi
