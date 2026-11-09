@@ -133,7 +133,7 @@ jobs:
           script_stop: true
           script: |
             set -eu
-            cd "$HOME/repositories/mosquesmart"
+            cd "$HOME/serverweb/services/mosquesmart"
             test -f .env
             trap 'status=$?; echo "Deployment failed with exit code $status"; docker compose --env-file .env ps -a; docker compose --env-file .env logs --tail=100 api admin-web display-web || true; exit "$status"' ERR
             git fetch origin main
