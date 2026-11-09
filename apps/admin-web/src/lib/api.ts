@@ -60,6 +60,6 @@ export const api = {
   put: <T>(path: string, data?: unknown) => request<T>(path, { method: 'PUT', body: data !== undefined ? JSON.stringify(data) : undefined }),
   patch: <T>(path: string, data?: unknown) => request<T>(path, { method: 'PATCH', body: data !== undefined ? JSON.stringify(data) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
-  upload: <T>(path: string, formData: FormData) => request<T>(path, { method: 'POST', body: formData }),
+  upload: <T>(path: string, formData: FormData, signal?: AbortSignal) => request<T>(path, { method: 'POST', body: formData, signal }),
   baseUrl: API_BASE,
 };

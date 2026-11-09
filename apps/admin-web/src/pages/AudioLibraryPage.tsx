@@ -1,6 +1,7 @@
 import { SpeechCreator } from '../components/SpeechCreator';
+import { S3Upload, type S3UploadResult } from '../components/S3Upload';
 import {Select} from '../components/Select';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import './audio-library.css';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,10 +25,8 @@ export function AudioLibraryPage() {
   const [message, setMessage] = useState('');
   const [name, setName] = useState('');
   const [category, setCategory] = useState('GENERAL');
-  const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = () => api.get<Audio[]>('/audio').then(setItems).catch((err) => setError(err.message));
   useEffect(() => {
@@ -37,8 +36,7 @@ export function AudioLibraryPage() {
   }, []);
 
   const reset = () => {
-    setEditingId(null); setName(''); setDescription(''); setCategory('GENERAL'); setFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setEditingId(null); setName(''); setDescription(''); setCategory('GENERAL');
   };
   const edit = (audio: Audio) => {
     setMode('upload'); reset(); setEditingId(audio.id); setName(audio.name); setDescription(audio.description || '');
@@ -48,22 +46,15 @@ export function AudioLibraryPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingId && !file) { setError('Pilih file audio terlebih dahulu (mp3/wav).'); return; }
+    if (!editingId) return;
     setError(null);
     setMessage('');
     setUploading(true);
     try {
       if (editingId) {
         await api.patch(`/audio/${editingId}`, { name: name.trim(), category, description });
-      } else if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('name', name.trim() || file.name);
-        formData.append('category', category);
-        formData.append('description', description);
-        await api.upload('/audio/upload', formData);
       }
-      setMessage(editingId ? 'Perubahan audio tersimpan.' : 'Audio berhasil diunggah.');
+      setMessage('Perubahan audio tersimpan.');
       reset(); await load();
     } catch (err) {
       setError((err as Error).message);
@@ -74,10 +65,31 @@ export function AudioLibraryPage() {
 
   const toggleActive = async (a: Audio) => { try { await api.patch(`/audio/${a.id}`, { isActive: !a.isActive }); await load(); } catch(err) { setError((err as Error).message); } };
   const remove = async (id: string) => { if (confirm('Hapus audio ini? File akan dihapus permanen.')) { try { await api.delete(`/audio/${id}`); await load(); } catch(err) { setError((err as Error).message); } } };
-  const selectFile = (value: File | null) => {
-    if (!value) return;
-    if (!/\.(mp3|wav)$/i.test(value.name) || value.size > 100*1024*1024) { setError('Pilih file MP3/WAV dengan ukuran maksimal 100 MB.'); return; }
-    setFile(value); setError(null);
+  const uploadAudio = async (file: File, onProgress: (progress: number) => void, signal: AbortSignal): Promise<S3UploadResult> => {
+    if (signal.aborted) throw new DOMException('Upload dibatalkan.', 'AbortError');
+    setError(null); setMessage(''); setUploading(true); onProgress(10);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', name.trim() || file.name);
+    formData.append('category', category);
+    formData.append('description', description);
+    try {
+      const audio = await api.upload<Audio>('/audio/upload', formData, signal);
+      onProgress(100);
+      return { key: audio.id, file };
+    } catch (error) {
+      setError((error as Error).message);
+      throw error;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUploaded = async () => {
+    setMessage('Audio berhasil diunggah.');
+    reset();
+    await load();
+    setUploading(false);
   };
   const shown=items.filter(a=>(!filter||a.category===filter)&&[a.name,a.description].join(' ').toLowerCase().includes(query.toLowerCase()));
 
@@ -96,9 +108,9 @@ export function AudioLibraryPage() {
           {CATEGORIES.map((c) => <option key={c} value={c}>{LABELS[c]}</option>)}
         </Select></label>
         <label>Deskripsi<textarea value={description} onChange={e => setDescription(e.target.value)} /></label>
-        {!editingId && <div className="audio-file-field"><label htmlFor="library-audio-file">File Audio (MP3 / WAV)</label><div className="audio-dropzone" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!uploading)selectFile(e.dataTransfer.files[0]||null);}}><span aria-hidden="true">↥</span><div><b>{file?.name || 'Pilih file audio atau drag and drop di sini'}</b><small>{file ? `${(file.size/1024/1024).toFixed(2)} MB` : 'Format MP3, WAV (maks. 100 MB)'}</small></div><button type="button" disabled={uploading} onClick={()=>fileInputRef.current?.click()}>Pilih File</button><input id="library-audio-file" ref={fileInputRef} type="file" accept=".mp3,.wav,audio/mpeg,audio/wav" disabled={uploading} onChange={e=>{selectFile(e.target.files?.[0]||null);e.target.value='';}} /></div></div>}
+         {!editingId && <div className="audio-file-field"><label>File Audio (MP3 / WAV)</label><S3Upload accept=".mp3,.wav,audio/mpeg,audio/wav" maxSizeBytes={100 * 1024 * 1024} multiple={false} disabled={uploading} uploadFile={uploadAudio} onUploaded={() => { void handleUploaded(); }} /></div>}
         {editingId && <p className="hint">Ubah nama, kategori, dan deskripsi audio. File rekaman tetap menggunakan file yang sudah diunggah.</p>}
-        <div className="form-actions"><button type="submit" disabled={uploading}>{uploading ? 'Menyimpan...' : editingId ? 'Simpan Perubahan' : 'Upload'}</button>
+         <div className="form-actions">{editingId && <button type="submit" disabled={uploading}>{uploading ? 'Menyimpan...' : 'Simpan Perubahan'}</button>}
           <button type="button" className="secondary" disabled={uploading} onClick={() => { reset(); setError(null); }}>{editingId ? 'Batal' : '↶ Reset'}</button>
         </div>
       </form>
