@@ -8,6 +8,7 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "test:storage": "node -r ts-node/register/transpile-only --test tests/object-storage.test.cjs",
     "lint": "tsc --noEmit"
   },
   "prisma": {
@@ -23,6 +24,7 @@
     "@nestjs/platform-socket.io": "^11.0.0",
     "@nestjs/schedule": "^5.0.1",
     "@nestjs/websockets": "^11.0.0",
+    "@aws-sdk/client-s3": "^3.864.0",
     "@prisma/client": "^6.0.0",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",

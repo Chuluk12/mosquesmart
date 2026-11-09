@@ -9,10 +9,11 @@ import { CreateAgendaDto, UpdateAgendaDto } from './dto/agenda.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { ObjectStorageService } from '../object-storage/object-storage.service';
 
 @Controller('agendas')
 export class AgendaController {
-  constructor(private readonly agendaService: AgendaService) {}
+  constructor(private readonly agendaService: AgendaService, private readonly storage: ObjectStorageService) {}
 
   @Post(':id/image')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPERATOR)
@@ -20,7 +21,8 @@ export class AgendaController {
   async uploadImage(@Param('id') id:string,@UploadedFile() file:Express.Multer.File){
     await this.agendaService.ensureExists(id);
     if(!file||!imageType(file.buffer))throw new BadRequestException('Pilih gambar PNG, JPG, atau WebP (maksimal 5 MB).');
-    await writeFile(agendaImagePath(id),file.buffer);
+    if (this.storage.isEnabled()) await this.storage.put(`agenda-images/${id}`, file.buffer, imageType(file.buffer)!);
+    else await writeFile(agendaImagePath(id),file.buffer);
     await this.agendaService.update(id,{});
     return {ok:true};
   }
@@ -28,6 +30,21 @@ export class AgendaController {
   @Get(':id/image')
   async image(@Param('id') id:string,@Res() res:Response){
     await this.agendaService.ensureExists(id);
+    if (this.storage.isEnabled()) {
+      try {
+        const object = await this.storage.get(`agenda-images/${id}`);
+        res.setHeader('Content-Type', object.ContentType || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        return (object.Body as NodeJS.ReadableStream & { pipe: (destination: Response) => Response }).pipe(res);
+      } catch (err) {
+        if ((err as { name?: string }).name !== 'NoSuchKey') throw err;
+        if (!hasAgendaImage(id)) return res.status(404).end();
+        const buffer=await readFile(agendaImagePath(id));
+        res.setHeader('Content-Type',imageType(buffer)||'application/octet-stream');
+        res.setHeader('Cache-Control','no-cache');
+        return res.send(buffer);
+      }
+    }
     if(!hasAgendaImage(id))return res.status(404).end();
     const buffer=await readFile(agendaImagePath(id));
     res.setHeader('Content-Type',imageType(buffer)||'application/octet-stream');
@@ -38,6 +55,7 @@ export class AgendaController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPERATOR)
   async removeImage(@Param('id') id:string){
     await this.agendaService.ensureExists(id);
+    if (this.storage.isEnabled()) await this.storage.remove(`agenda-images/${id}`);
     await unlink(agendaImagePath(id)).catch(e=>{if(e.code!=='ENOENT')throw e;});
     await this.agendaService.update(id,{});return {ok:true};
   }
@@ -62,8 +80,10 @@ export class AgendaController {
 
   @Delete(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  remove(@Param('id') id: string) {
-    return this.agendaService.remove(id);
+  async remove(@Param('id') id: string) {
+    const result = await this.agendaService.remove(id);
+    if (this.storage.isEnabled()) await this.storage.remove(`agenda-images/${id}`);
+    return result;
   }
 }
 function imageType(b:Buffer){

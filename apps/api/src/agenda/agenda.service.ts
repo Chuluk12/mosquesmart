@@ -5,10 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MosqueService } from '../mosque/mosque.service';
 import { CreateAgendaDto, UpdateAgendaDto } from './dto/agenda.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { ObjectStorageService } from '../object-storage/object-storage.service';
 
 @Injectable()
 export class AgendaService {
-  constructor(private readonly prisma: PrismaService, private readonly mosqueService: MosqueService, private readonly realtime: RealtimeGateway) {}
+  constructor(private readonly prisma: PrismaService, private readonly mosqueService: MosqueService, private readonly realtime: RealtimeGateway, private readonly storage: ObjectStorageService) {}
 
   async list(activeOnly = false) {
     const mosque = await this.mosqueService.getOrCreate();
@@ -16,7 +17,13 @@ export class AgendaService {
       where: { mosqueId: mosque.id, ...(activeOnly ? { isActive: true } : {}) },
       orderBy: { startDate: 'asc' },
     });
-    return agendas.map(a=>({...resolveAgenda(a,mosque.timezone),hasImage:hasAgendaImage(a.id)})).sort((a,b)=>a.startDate.getTime()-b.startDate.getTime());
+    const resolved = await Promise.all(agendas.map(async a => ({
+      ...resolveAgenda(a, mosque.timezone),
+      hasImage: this.storage.isEnabled()
+        ? (await this.storage.exists(`agenda-images/${a.id}`) || hasAgendaImage(a.id))
+        : hasAgendaImage(a.id),
+    })));
+    return resolved.sort((a,b)=>a.startDate.getTime()-b.startDate.getTime());
   }
 
   async create(dto: CreateAgendaDto) {

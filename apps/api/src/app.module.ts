@@ -17,6 +17,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { ObjectStorageModule } from './object-storage/object-storage.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     SchedulerModule,
     QuotePlaylistModule,
     HistoryModule,
+    ObjectStorageModule,
   ],
   controllers: [HealthController],
   providers: [

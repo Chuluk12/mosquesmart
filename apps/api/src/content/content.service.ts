@@ -24,22 +24,23 @@ export class ContentService {
   }
 
   async update(id: string, dto: UpdateContentDto) {
-    await this.ensureExists(id);
+    await this.findOne(id);
     const updated = await this.prisma.content.update({ where: { id }, data: dto });
     this.realtime.emit('content:updated', { action: 'update', id });
     return updated;
   }
 
+  async findOne(id: string) {
+    const found = await this.prisma.content.findUnique({ where: { id } });
+    if (!found) throw new NotFoundException('Content not found');
+    return found;
+  }
+
   async remove(id: string) {
-    await this.ensureExists(id);
+    await this.findOne(id);
     await this.prisma.content.delete({ where: { id } });
     this.realtime.emit('content:updated', { action: 'delete', id });
     return { ok: true };
   }
 
-  private async ensureExists(id: string) {
-    const found = await this.prisma.content.findUnique({ where: { id } });
-    if (!found) throw new NotFoundException('Content not found');
-    return found;
-  }
 }

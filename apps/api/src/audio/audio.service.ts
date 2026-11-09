@@ -6,10 +6,11 @@ import { MosqueService } from '../mosque/mosque.service';
 import { UpdateAudioDto } from './dto/audio.dto';
 import { AUDIO_STORAGE_DIR } from './audio-storage';
 import { AudioCategory } from '@prisma/client';
+import { ObjectStorageService } from '../object-storage/object-storage.service';
 
 @Injectable()
 export class AudioService {
-  constructor(private readonly prisma: PrismaService, private readonly mosqueService: MosqueService) {}
+  constructor(private readonly prisma: PrismaService, private readonly mosqueService: MosqueService, private readonly storage: ObjectStorageService) {}
 
   async list(category?: AudioCategory, activeOnly = false) {
     const mosque = await this.mosqueService.getOrCreate();
@@ -61,9 +62,12 @@ export class AudioService {
       ].filter(Boolean).join(', ');
       throw new BadRequestException('Audio masih digunakan oleh ' + users + '. Lepaskan dari jadwal atau playlist terlebih dahulu.');
     }
-    const fullPath = join(AUDIO_STORAGE_DIR, audio.filePath);
-    if (existsSync(fullPath)) {
-      try { unlinkSync(fullPath); } catch { /* best-effort cleanup; DB row removal is what matters */ }
+    if (this.storage.isEnabled() && audio.filePath.startsWith('audio/')) await this.storage.remove(audio.filePath);
+    else {
+      const fullPath = join(AUDIO_STORAGE_DIR, audio.filePath);
+      if (existsSync(fullPath)) {
+        try { unlinkSync(fullPath); } catch { /* best-effort cleanup; DB row removal is what matters */ }
+      }
     }
     await this.prisma.audio.delete({ where: { id } });
     return { ok: true };

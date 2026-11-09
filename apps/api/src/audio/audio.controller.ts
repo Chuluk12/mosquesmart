@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { readFile, unlink } from 'fs/promises';
 import type { Response } from 'express';
 import type { Express } from 'express';
 import { AudioService } from './audio.service';
@@ -16,12 +17,13 @@ import {
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole, AudioCategory } from '@prisma/client';
+import { ObjectStorageService } from '../object-storage/object-storage.service';
 
 ensureAudioStorageDir();
 
 @Controller('audio')
 export class AudioController {
-  constructor(private readonly audioService: AudioService, private readonly speech: SpeechService) {}
+  constructor(private readonly audioService: AudioService, private readonly speech: SpeechService, private readonly storage: ObjectStorageService) {}
   @Get('speech/status')
   speechStatus() { return this.speech.status(); }
   @Post('speech')
@@ -66,6 +68,12 @@ export class AudioController {
     if (!category || !Object.values(AudioCategory).includes(category)) {
       throw new BadRequestException('A valid category is required');
     }
+    if (this.storage.isEnabled()) {
+      const key = `audio/${file.filename}`;
+      await this.storage.put(key, await readFile(file.path), file.mimetype);
+      await unlink(file.path);
+      file.filename = key;
+    }
     return this.audioService.create({
       name: name || file.originalname,
       description,
@@ -84,6 +92,12 @@ export class AudioController {
   @Get(':id/file')
   async file(@Param('id') id: string, @Res() res: Response) {
     const audio = await this.audioService.findOne(id);
+    if (this.storage.isEnabled() && audio.filePath.startsWith('audio/')) {
+      const object = await this.storage.get(audio.filePath);
+      res.setHeader('Content-Type', audio.mimeType);
+      res.setHeader('Accept-Ranges', 'bytes');
+      return (object.Body as NodeJS.ReadableStream & { pipe: (destination: Response) => Response }).pipe(res);
+    }
     return res.sendFile(this.audioService.filePathOf(audio));
   }
 
