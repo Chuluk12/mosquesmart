@@ -95,26 +95,54 @@ jobs:
     environment: production
 
     steps:
-      - name: Write OpenVPN config
+      - name: Connect to OpenVPN
         shell: bash
         env:
           OPENVPN_CONFIG: ${{ secrets.OPENVPN_CONFIG }}
         run: |
-          test -n "$OPENVPN_CONFIG"
-          printf '%s' "$OPENVPN_CONFIG" > "$RUNNER_TEMP/mosquesmart.ovpn"
+          set -Eeuo pipefail
 
-      - name: Install OpenVPN
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y openvpn openvpn-systemd-resolved
+          LOG_FILE="$RUNNER_TEMP/openvpn.log"
+          CONFIG_FILE="$RUNNER_TEMP/openvpn-client.ovpn"
+          PID_FILE="$RUNNER_TEMP/openvpn.pid"
 
-      - name: Connect to OpenVPN
-        uses: kota65535/github-openvpn-connect-action@v2
-        with:
-          config_file: ${{ runner.temp }}/mosquesmart.ovpn
-          username: ${{ secrets.OPENVPN_USERNAME }}
-          password: ${{ secrets.OPENVPN_PASSWORD }}
+          printf '%s' "$OPENVPN_CONFIG" > "$CONFIG_FILE"
+          chmod 600 "$CONFIG_FILE"
+
+          sudo touch "$LOG_FILE" "$PID_FILE"
+
+          sudo openvpn \
+            --config "$CONFIG_FILE" \
+            --daemon \
+            --writepid "$PID_FILE" \
+            --log "$LOG_FILE"
+
+          connected=false
+
+          for attempt in {1..60}; do
+            if grep -q "Initialization Sequence Completed" "$LOG_FILE"; then
+              connected=true
+              break
+            fi
+
+            if ! sudo kill -0 "$(sudo cat "$PID_FILE")" 2>/dev/null; then
+              echo "OpenVPN process stopped!"
+              sudo cat "$LOG_FILE"
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          if [ "$connected" != true ]; then
+            echo "OpenVPN connection timeout!"
+            sudo cat "$LOG_FILE"
+            exit 1
+          fi
+
+          echo "OpenVPN connected successfully!"
+          ip addr show tun0
+          ip route
 
       - name: Deploy through SSH
         uses: appleboy/ssh-action@v1.2.0
