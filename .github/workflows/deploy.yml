@@ -134,7 +134,8 @@ jobs:
           chmod 600 "$CONFIG_FILE"
 
           sudo touch "$LOG_FILE" "$PID_FILE"
-          sudo chmod 600 "$LOG_FILE" "$PID_FILE"
+          sudo chmod 644 "$LOG_FILE"
+          sudo chmod 600 "$PID_FILE"
 
           echo "Starting OpenVPN..."
 
