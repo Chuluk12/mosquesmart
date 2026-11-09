@@ -1,6 +1,12 @@
 import { runtimeConfig } from './runtime-config';
 
-const API_BASE = runtimeConfig.apiUrl || '/api';
+function normalizeApiBase(value: string | undefined): string {
+  const configured = (value || '').trim().replace(/\/+$/, '');
+  if (!configured) return '/api';
+  return configured.endsWith('/api') ? configured : `${configured}/api`;
+}
+
+const API_BASE = normalizeApiBase(runtimeConfig.apiUrl);
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

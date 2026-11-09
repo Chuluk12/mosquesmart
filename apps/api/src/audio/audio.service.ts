@@ -75,6 +75,7 @@ export class AudioService {
 
   /** Resolves the public HTTP URL the player service will download/stream from. */
   publicUrl(id: string, apiBaseUrl: string) {
-    return `${apiBaseUrl}/api/audio/${id}/file`;
+    const base = apiBaseUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+    return `${base}/api/audio/${id}/file`;
   }
 }

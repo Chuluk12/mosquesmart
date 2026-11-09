@@ -7,7 +7,10 @@ function MetaIcon({kind}:{kind:'calendar'|'clock'|'pin'}) {
  return <svg className="study-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{kind==='calendar'?<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6m10-6v6M3 11h18M7 15h1m4 0h1m4 0h1M7 18h1m4 0h1"/></>:kind==='clock'?<><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></>:<><path fill="currentColor" stroke="none" d="M12 2a8 8 0 0 0-8 8c0 6 8 13 8 13s8-7 8-13a8 8 0 0 0-8-8Z"/><circle cx="12" cy="10" r="3" fill="white" stroke="none"/></>}</svg>;
 }
 
-const mediaSource=(url?:string)=>url?.startsWith('/api/contents/images/')?new URL(url,new URL(runtimeConfig.apiUrl||'/api',window.location.origin)).href:url;
+const apiBase = (runtimeConfig.apiUrl || '/api').replace(/\/+$/, '').endsWith('/api')
+  ? (runtimeConfig.apiUrl || '/api').replace(/\/+$/, '')
+  : `${(runtimeConfig.apiUrl || '/api').replace(/\/+$/, '')}/api`;
+const mediaSource=(url?:string)=>url?.startsWith('/api/contents/images/')?new URL(url,new URL(apiBase,window.location.origin)).href:url;
 
 // Use the persisted durations; prayer takeover screens unmount this slideshow.
 export function AgendaSlides({ contents = [], agendas, timezone, mosqueName, prayer, enabled, prayerSeconds = 120, agendaSeconds = 60 }: { contents?: Content[]; agendas: Agenda[]; timezone: string; mosqueName?: string; prayer: PrayerToday; enabled: boolean; prayerSeconds?: number; agendaSeconds?: number }) {
@@ -36,7 +39,7 @@ export function AgendaSlides({ contents = [], agendas, timezone, mosqueName, pra
   if (!agenda || slide === 0) return null;
   const time=(d:string)=>new Date(d).toLocaleTimeString('id-ID',{timeZone:timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
   return <section className="agenda-display-slide study-slide" key={agenda.id} aria-label="Agenda mushola">
-     <div className="study-art">{agenda.hasImage&&<img className="study-custom-image" src={`${runtimeConfig.apiUrl||'/api'}/agendas/${agenda.id}/image?v=${agenda.updatedAt||''}`} alt="" onError={e=>{e.currentTarget.style.display='none';}}/>}<span className="study-badge">&#128214; &nbsp; {agenda.repeatWeekly?'KAJIAN RUTIN':'AGENDA MUSHOLA'}</span><blockquote>&ldquo;{agenda.quote||'Mari belajar bersama, menambah ilmu dan mempererat ukhuwah.'}&rdquo;</blockquote></div>
+     <div className="study-art">{agenda.hasImage&&<img className="study-custom-image" src={`${apiBase}/agendas/${agenda.id}/image?v=${agenda.updatedAt||''}`} alt="" onError={e=>{e.currentTarget.style.display='none';}}/>}<span className="study-badge">&#128214; &nbsp; {agenda.repeatWeekly?'KAJIAN RUTIN':'AGENDA MUSHOLA'}</span><blockquote>&ldquo;{agenda.quote||'Mari belajar bersama, menambah ilmu dan mempererat ukhuwah.'}&rdquo;</blockquote></div>
     <div className="study-body"><small className="study-eyebrow">AGENDA MUSHOLA</small><h2>{agenda.title}</h2>
       {agenda.topic&&<h3>{agenda.topic}</h3>}
       {agenda.description&&<p className="study-description">{agenda.description}</p>}

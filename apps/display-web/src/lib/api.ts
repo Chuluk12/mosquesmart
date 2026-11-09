@@ -1,6 +1,12 @@
 import { runtimeConfig } from './runtime-config';
 
-const API_BASE = runtimeConfig.apiUrl || '/api';
+function normalizeApiBase(value: string | undefined): string {
+  const configured = (value || '').trim().replace(/\/+$/, '');
+  if (!configured) return '/api';
+  return configured.endsWith('/api') ? configured : `${configured}/api`;
+}
+
+const API_BASE = normalizeApiBase(runtimeConfig.apiUrl);
 
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);
