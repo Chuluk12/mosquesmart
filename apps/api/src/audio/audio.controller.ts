@@ -94,7 +94,7 @@ export class AudioController {
     const audio = await this.audioService.findOne(id);
     if (this.storage.isEnabled() && audio.filePath.startsWith('audio/')) {
       const object = await this.storage.get(audio.filePath);
-      res.setHeader('Content-Type', audio.mimeType);
+      res.setHeader('Content-Type', audio.mimeType || object.ContentType || 'application/octet-stream');
       res.setHeader('Accept-Ranges', 'bytes');
       return (object.Body as NodeJS.ReadableStream & { pipe: (destination: Response) => Response }).pipe(res);
     }
