@@ -271,11 +271,16 @@ jobs:
               --env-file .env \
               up -d \
               --no-build \
+              --force-recreate \
               --remove-orphans \
               --timeout 60
 
             echo "Container status:"
             docker compose --env-file .env ps -a
+
+            echo "Runtime web API config:"
+            docker compose --env-file .env exec -T admin-web \
+              sh -c 'grep -E "apiUrl|socketUrl" /usr/share/nginx/html/runtime-config.js'
 
             echo "Cleaning unused Docker images..."
             docker image prune -f
